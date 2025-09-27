@@ -1,0 +1,23 @@
+[package]
+name = "level-editor"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Level editor for SystemTactics: hex map creation, scenario design, and tactical encounter building"
+
+[dependencies]
+bevy.workspace = true
+hexx.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+shared = { path = "../shared" }
+
+[[bin]]
+name = "level-editor"
+path = "src/main.rs"

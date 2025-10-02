@@ -4,34 +4,33 @@
 //! and building encounters for SystemTactics.
 
 use bevy::prelude::*;
+use bevy::asset::AssetPlugin;
+use shared::{RenderingPlugin, LevelPlugin};
+use tracing::info;
 
 fn main() {
+    info!("Starting SystemTactics Level Editor application");
+
     App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "SystemTactics Level Editor".into(),
+        .add_plugins(DefaultPlugins
+            .set(WindowPlugin {
+                primary_window: Some(Window {
+                    title: "SystemTactics Level Editor".into(),
+                    ..default()
+                }),
                 ..default()
-            }),
-            ..default()
-        }))
-        .add_systems(Startup, setup)
+            })
+            .set(AssetPlugin {
+                file_path: "../assets".to_string(),
+                ..default()
+            })
+        )
+        .add_plugins(RenderingPlugin)
+        .add_plugins(LevelPlugin)
         .add_systems(Update, placeholder_editor_system)
         .run();
-}
 
-fn setup(mut commands: Commands) {
-    // Spawn a 2D camera
-    commands.spawn(Camera2d);
-
-    // Add editor UI placeholder
-    commands.spawn((
-        Text2d::new("SystemTactics Level Editor\nHex Map Creation Tool"),
-        TextFont {
-            font_size: 32.0,
-            ..default()
-        },
-        TextColor(Color::WHITE),
-    ));
+    info!("SystemTactics Level Editor application shutting down");
 }
 
 fn placeholder_editor_system() {

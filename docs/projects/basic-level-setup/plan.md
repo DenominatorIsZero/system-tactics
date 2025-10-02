@@ -9,18 +9,23 @@ Implement the foundational 3D hex grid level system as specified in `specs/basic
 **Goal**: Get something visible on screen as early as possible, then incrementally improve it.
 
 ### Phase 1: Minimal Visible Prototype
+
 Get a simple 3D hex grid rendering in the game with basic camera.
 
 ### Phase 2: Proper Materials and Positioning
+
 Add correct colors, materials, and hex positioning.
 
 ### Phase 3: Full Feature Set
+
 Add camera controls, level editor integration, and polish.
 
 ## Task Breakdown
 
 ### Task 1: Basic Bevy 3D Setup ✅
+
 **Goal**: Get a simple 3D scene running to verify Bevy setup works.
+
 - [x] Add basic 3D camera to game/src/main.rs
 - [x] Add simple lighting (ambient + directional)
 - [x] Spawn a single test cube or cylinder to verify 3D rendering works
@@ -29,18 +34,25 @@ Add camera controls, level editor integration, and polish.
 
 **Test**: `just run-game` shows a 3D scene with a simple shape and lighting. ✅
 
-### Task 2: Single Static Hex Column
-**Goal**: Replace test shape with one hex column using hexx.
-- [ ] Study hexx 3D columns example briefly
-- [ ] Add hexx dependency to game/Cargo.toml if needed
-- [ ] Create simple hex column mesh using hexx (height=1.0, fixed position)
-- [ ] Replace test shape with hex column
-- [ ] Use basic material (any color) just to see the hex shape
+### Task 2: Single Static Hex Column ✅
 
-**Test**: `just run-game` shows a single 3D hex column instead of test shape.
+**Goal**: Replace test shape with one hex column using hexx.
+
+- [x] Study hexx 3D columns example briefly
+- [x] Add hexx dependency to workspace (already available)
+- [x] Create simple hex column mesh using hexx (height=1.0, fixed position)
+- [x] Replace test shape with hex column
+- [x] Use UV checker texture from hexx examples for better visualization
+- [x] Move functionality to shared library with plugin architecture
+- [x] Configure workspace-level assets to avoid duplication
+- [x] Remove unnecessary config structs and simplify code
+
+**Test**: `just run-game` shows a single 3D hex column with UV checker texture. ✅
 
 ### Task 3: Grid of Hex Columns
+
 **Goal**: Show multiple hexes arranged in a small grid.
+
 - [ ] Create simple loop to spawn 3x3 grid of hex columns
 - [ ] Position hexes using basic hex grid math (no shared library yet)
 - [ ] All hexes same height and basic material
@@ -49,7 +61,9 @@ Add camera controls, level editor integration, and polish.
 **Test**: `just run-game` shows 3x3 grid of hex columns in proper hexagonal layout.
 
 ### Task 4: Basic Camera Controls
+
 **Goal**: Add simple camera movement to navigate the hex grid.
+
 - [ ] Add WASD camera movement (no bounds checking yet)
 - [ ] Add mouse wheel zoom (basic implementation)
 - [ ] Fixed isometric angle
@@ -58,7 +72,9 @@ Add camera controls, level editor integration, and polish.
 **Test**: Can move camera around the hex grid with WASD and zoom with mouse wheel.
 
 ### Task 5: Proper Colors and Materials
+
 **Goal**: Make it look good with the specified color scheme.
+
 - [ ] Add color constants (can be in game binary for now)
 - [ ] Create proper materials with gray surface and green edges
 - [ ] Apply to all hex columns
@@ -67,7 +83,9 @@ Add camera controls, level editor integration, and polish.
 **Test**: Hex grid looks good with gray surfaces, green edges, and proper background.
 
 ### Task 6: Level Data Structure
+
 **Goal**: Replace hardcoded grid with actual Level struct.
+
 - [ ] Add ndarray dependency to shared/Cargo.toml
 - [ ] Create minimal Level struct in shared/src/level.rs
 - [ ] Implement Level::new() and basic height access
@@ -77,7 +95,9 @@ Add camera controls, level editor integration, and polish.
 **Test**: Game still shows hex grid, but now driven by Level struct data.
 
 ### Task 7: Variable Heights
+
 **Goal**: Show different height hexes to prove the system works.
+
 - [ ] Update Level to support different heights per hex
 - [ ] Create test level with varied heights (some 1, some 2, some 3)
 - [ ] Update hex spawning to use actual heights from Level
@@ -86,7 +106,9 @@ Add camera controls, level editor integration, and polish.
 **Test**: Hex grid shows varied heights creating interesting terrain.
 
 ### Task 8: Enhanced Camera Controls
+
 **Goal**: Make camera controls feel polished.
+
 - [ ] Add camera bounds to prevent moving too far from level
 - [ ] Add smooth movement and zoom (acceleration/deceleration)
 - [ ] Tune movement speeds for good feel
@@ -95,7 +117,9 @@ Add camera controls, level editor integration, and polish.
 **Test**: Camera controls feel smooth and stay appropriately bounded.
 
 ### Task 9: Level Editor Integration
+
 **Goal**: Get level editor showing the same thing.
+
 - [ ] Copy rendering system to level-editor binary
 - [ ] Test that level editor shows identical hex grid
 - [ ] Both use same Level resource and systems
@@ -103,7 +127,9 @@ Add camera controls, level editor integration, and polish.
 **Test**: `just run-level-editor` shows identical hex grid visualization.
 
 ### Task 10: WASM and Polish
+
 **Goal**: Verify WASM works and clean up code.
+
 - [ ] Test WASM compilation and browser functionality
 - [ ] Move shared code to proper locations
 - [ ] Add tests for core functionality
@@ -114,6 +140,7 @@ Add camera controls, level editor integration, and polish.
 ## Dependencies and Setup
 
 ### New Crate Dependencies
+
 ```toml
 # shared/Cargo.toml additions
 ndarray = { version = "0.16", features = ["serde"] }
@@ -123,6 +150,7 @@ ndarray = { version = "0.16", features = ["serde"] }
 ```
 
 ### Development Commands
+
 ```bash
 # Test individual components
 cargo test -p shared
@@ -143,16 +171,19 @@ just check
 ## Risk Mitigation
 
 ### Medium Risk: 3D Performance in WASM
+
 - **Mitigation**: Start with simple mesh generation, optimize if needed
 - **Fallback**: Reduce level size or simplify mesh complexity
 - **Testing**: Validate performance early with `just wasm`
 
 ### Low Risk: Hexx 3D Integration
+
 - **Mitigation**: Study hexx examples thoroughly before implementation
 - **Fallback**: Custom cylinder mesh generation if hexx doesn't meet needs
 - **Testing**: Test mesh generation with various heights and layouts
 
 ### Low Risk: Camera Control Feel
+
 - **Mitigation**: Reference strategy game camera patterns
 - **Fallback**: Adjust movement and zoom speeds based on testing
 - **Testing**: Get user feedback on camera responsiveness
@@ -169,11 +200,13 @@ just check
 ## Post-Implementation
 
 ### Immediate Follow-ups
+
 - Test with various level sizes (5x5, 15x15, 20x20)
 - Gather user feedback on camera control feel
 - Profile performance with larger levels
 
 ### Future Integration Points
+
 - Hex selection and highlighting system
 - Unit placement and movement visualization
 - Level editor terrain modification tools

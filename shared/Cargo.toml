@@ -12,6 +12,8 @@ categories.workspace = true
 description = "Shared game logic for SystemTactics: hex grid math, combat calculations, and entity definitions"
 
 [dependencies]
+bevy.workspace = true
 hexx.workspace = true
 anyhow.workspace = true
 serde.workspace = true
+tracing.workspace = true

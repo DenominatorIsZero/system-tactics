@@ -2598,6 +2598,7 @@ dependencies = [
  "hexx",
  "serde",
  "shared",
+ "tracing",
 ]
 
 [[package]]
@@ -3784,8 +3785,10 @@ name = "shared"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bevy",
  "hexx",
  "serde",
+ "tracing",
 ]
 
 [[package]]

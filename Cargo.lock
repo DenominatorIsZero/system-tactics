@@ -2109,6 +2109,7 @@ dependencies = [
  "hexx",
  "serde",
  "shared",
+ "tracing",
  "wasm-bindgen",
 ]
 

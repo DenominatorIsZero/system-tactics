@@ -18,6 +18,7 @@ bevy = "0.16.1"
 hexx = { version = "0.21", features = ["serde"] }
 anyhow = "1.0.99"
 serde = { version = "1.0.207", features = ["derive"] }
+tracing = "0.1.40"
 
 # Size-optimized release profile for WASM builds
 [profile.release]

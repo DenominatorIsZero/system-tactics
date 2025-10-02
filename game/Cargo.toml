@@ -16,6 +16,7 @@ bevy.workspace = true
 hexx.workspace = true
 anyhow.workspace = true
 serde.workspace = true
+tracing.workspace = true
 shared = { path = "../shared" }
 
 [target.wasm32-unknown-unknown.dependencies]

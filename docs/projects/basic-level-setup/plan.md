@@ -19,14 +19,15 @@ Add camera controls, level editor integration, and polish.
 
 ## Task Breakdown
 
-### Task 1: Basic Bevy 3D Setup
+### Task 1: Basic Bevy 3D Setup ✅
 **Goal**: Get a simple 3D scene running to verify Bevy setup works.
-- [ ] Add basic 3D camera to game/src/main.rs
-- [ ] Add simple lighting (ambient + directional)
-- [ ] Spawn a single test cube or cylinder to verify 3D rendering works
-- [ ] Run `just run-game` to see something on screen
+- [x] Add basic 3D camera to game/src/main.rs
+- [x] Add simple lighting (ambient + directional)
+- [x] Spawn a single test cube or cylinder to verify 3D rendering works
+- [x] Run `just run-game` to see something on screen
+- [x] Add tracing logs for better debugging visibility
 
-**Test**: `just run-game` shows a 3D scene with a simple shape and lighting.
+**Test**: `just run-game` shows a 3D scene with a simple shape and lighting. ✅
 
 ### Task 2: Single Static Hex Column
 **Goal**: Replace test shape with one hex column using hexx.

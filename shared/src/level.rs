@@ -50,7 +50,7 @@ fn calculate_hex_height(hex: Hex, grid_width: i32, grid_height: i32) -> f32 {
     // Create gradient: higher towards right (higher x) and back (higher y)
     let height_factor = (q_norm + r_norm) / 2.0;
 
-    1.0 + height_factor * 9.0
+    1.0 + height_factor * 3.0
 }
 
 /// System to spawn a 10x10 grid of hex columns with varying heights
@@ -60,11 +60,8 @@ pub fn spawn_hex_grid(
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
 ) {
-    // Smaller hex scale to fit more hexes in view
-    let hex_layout = HexLayout {
-        scale: Vec2::splat(1.0),
-        ..default()
-    };
+    // Pointy orientation hex layout for proper tactical RPG alignment
+    let hex_layout = HexLayout::pointy().with_scale(Vec2::splat(1.0));
 
     // Load shared texture and material
     let uv_texture = asset_server.load("uv_checker.png");

@@ -61,16 +61,18 @@ Add camera controls, level editor integration, and polish.
 
 **Test**: `just run-game` shows 10x10 grid of hex columns in proper hexagonal layout. ✅
 
-### Task 4: Basic Camera Controls
+### Task 4: Basic Camera Controls ✅
 
 **Goal**: Add simple camera movement to navigate the hex grid.
 
-- [ ] Add WASD camera movement (no bounds checking yet)
-- [ ] Add mouse wheel zoom (basic implementation)
-- [ ] Fixed isometric angle
-- [ ] No fancy bounds or easing, just functional movement
+- [x] Add WASD camera movement (no bounds checking yet)
+- [x] Add mouse wheel zoom (basic implementation)
+- [x] Fixed isometric angle with proper orthographic projection
+- [x] No fancy bounds or easing, just functional movement
+- [x] Fixed hex grid alignment using pointy orientation
+- [x] Camera movement aligned with viewing perspective
 
-**Test**: Can move camera around the hex grid with WASD and zoom with mouse wheel.
+**Test**: Can move camera around the hex grid with WASD and zoom with mouse wheel. ✅
 
 ### Task 5: Proper Colors and Materials
 

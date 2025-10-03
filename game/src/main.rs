@@ -3,29 +3,30 @@
 //! A tactical RPG inspired by Final Fantasy Tactics with unique god evolution
 //! and system apocalypse mechanics, built in Bevy and compiled to WASM.
 
-use bevy::prelude::*;
 use bevy::asset::AssetPlugin;
-use shared::{RenderingPlugin, LevelPlugin};
+use bevy::prelude::*;
+use shared::{LevelPlugin, RenderingPlugin};
 use tracing::info;
 
 fn main() {
     info!("Starting SystemTactics game application");
 
     App::new()
-        .add_plugins(DefaultPlugins
-            .set(WindowPlugin {
-                primary_window: Some(Window {
-                    title: "SystemTactics".into(),
-                    canvas: Some("#bevy".to_owned()),
-                    fit_canvas_to_parent: true,
+        .add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "SystemTactics".into(),
+                        canvas: Some("#bevy".to_owned()),
+                        fit_canvas_to_parent: true,
+                        ..default()
+                    }),
+                    ..default()
+                })
+                .set(AssetPlugin {
+                    file_path: "../assets".to_string(),
                     ..default()
                 }),
-                ..default()
-            })
-            .set(AssetPlugin {
-                file_path: "../assets".to_string(),
-                ..default()
-            })
         )
         .add_plugins(RenderingPlugin)
         .add_plugins(LevelPlugin)

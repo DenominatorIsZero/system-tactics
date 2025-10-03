@@ -49,16 +49,17 @@ Add camera controls, level editor integration, and polish.
 
 **Test**: `just run-game` shows a single 3D hex column with UV checker texture. ✅
 
-### Task 3: Grid of Hex Columns
+### Task 3: Grid of Hex Columns ✅
 
 **Goal**: Show multiple hexes arranged in a small grid.
 
-- [ ] Create simple loop to spawn 3x3 grid of hex columns
-- [ ] Position hexes using basic hex grid math (no shared library yet)
-- [ ] All hexes same height and basic material
-- [ ] Use hardcoded spacing for now
+- [x] Create simple loop to spawn 10x10 grid of hex columns
+- [x] All hexes and material but different height
+- [x] Use rectangular grid layout (0-9 coordinates)
+- [x] Implement height gradient from front-left (low) to back-right (high)
+- [x] Adjust camera and hex scale for optimal visibility
 
-**Test**: `just run-game` shows 3x3 grid of hex columns in proper hexagonal layout.
+**Test**: `just run-game` shows 10x10 grid of hex columns in proper hexagonal layout. ✅
 
 ### Task 4: Basic Camera Controls
 

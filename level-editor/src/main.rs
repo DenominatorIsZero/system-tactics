@@ -3,27 +3,28 @@
 //! A Bevy-based level editor for creating hex maps, designing tactical scenarios,
 //! and building encounters for SystemTactics.
 
-use bevy::prelude::*;
 use bevy::asset::AssetPlugin;
-use shared::{RenderingPlugin, LevelPlugin};
+use bevy::prelude::*;
+use shared::{LevelPlugin, RenderingPlugin};
 use tracing::info;
 
 fn main() {
     info!("Starting SystemTactics Level Editor application");
 
     App::new()
-        .add_plugins(DefaultPlugins
-            .set(WindowPlugin {
-                primary_window: Some(Window {
-                    title: "SystemTactics Level Editor".into(),
+        .add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "SystemTactics Level Editor".into(),
+                        ..default()
+                    }),
+                    ..default()
+                })
+                .set(AssetPlugin {
+                    file_path: "../assets".to_string(),
                     ..default()
                 }),
-                ..default()
-            })
-            .set(AssetPlugin {
-                file_path: "../assets".to_string(),
-                ..default()
-            })
         )
         .add_plugins(RenderingPlugin)
         .add_plugins(LevelPlugin)

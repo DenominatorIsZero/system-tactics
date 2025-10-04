@@ -116,8 +116,9 @@ Add camera controls, level editor integration, and polish.
 - [ ] Add smooth movement and zoom (acceleration/deceleration)
 - [ ] Tune movement speeds for good feel
 - [ ] Add zoom limits (min/max distance)
+- [ ] **Update camera rotation system to use hex raycasting** (currently uses XZ plane intersection which is inaccurate for variable height hexes - needs Level data structure from Task 6)
 
-**Test**: Camera controls feel smooth and stay appropriately bounded.
+**Test**: Camera controls feel smooth and stay appropriately bounded. Rotation centers correctly on the hex the camera is actually viewing.
 
 ### Task 9: Level Editor Integration
 

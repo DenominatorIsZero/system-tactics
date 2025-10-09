@@ -74,16 +74,16 @@ Add camera controls, level editor integration, and polish.
 
 **Test**: Can move camera around the hex grid with WASD and zoom with mouse wheel. ✅
 
-### Task 5: Proper Colors and Materials
+### Task 5: Proper Colors and Materials ✅
 
 **Goal**: Make it look good with the specified color scheme.
 
-- [ ] Add color constants (can be in game binary for now)
-- [ ] Create proper materials with gray surface and green edges
-- [ ] Apply to all hex columns
-- [ ] Set background color to match website
+- [x] Add color constants (created shared/src/colors.rs with tactical RPG palette)
+- [x] Create proper materials with gray surface and green edges
+- [x] Apply to all hex columns
+- [x] Set white background for clean tactical view
 
-**Test**: Hex grid looks good with gray surfaces, green edges, and proper background.
+**Test**: Hex grid looks good with gray surfaces, green edges, and proper background. ✅
 
 ### Task 6: Level Data Structure
 

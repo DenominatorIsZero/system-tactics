@@ -3,12 +3,15 @@
 //! Shared level creation functionality for spawning hex-based level geometry
 //! in both the game and level editor applications.
 
+use bevy::pbr::wireframe::{Wireframe, WireframeConfig, WireframePlugin};
 use bevy::prelude::*;
 use bevy::render::{
     mesh::{Indices, PrimitiveTopology},
     render_asset::RenderAssetUsages,
 };
 use hexx::{ColumnMeshBuilder, Hex, HexLayout};
+
+use crate::colors::*;
 
 /// Create a hexagonal column mesh using hexx
 pub fn create_hex_column_mesh(layout: &HexLayout, height: f32) -> Mesh {
@@ -58,16 +61,16 @@ pub fn spawn_hex_grid(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    asset_server: Res<AssetServer>,
 ) {
     // Pointy orientation hex layout for proper tactical RPG alignment
     let hex_layout = HexLayout::pointy().with_scale(Vec2::splat(1.0));
 
-    // Load shared texture and material
-    let uv_texture = asset_server.load("uv_checker.png");
-    let material_handle = materials.add(StandardMaterial {
-        base_color: Color::WHITE,
-        base_color_texture: Some(uv_texture),
+    // Create tactical gray material for hex surfaces
+    let hex_material = materials.add(StandardMaterial {
+        base_color: HEX_SURFACE_GRAY,
+        metallic: 0.1,
+        perceptual_roughness: 0.8,
+        reflectance: 0.2,
         ..default()
     });
 
@@ -81,10 +84,12 @@ pub fn spawn_hex_grid(
         let hex_mesh = create_hex_column_mesh(&hex_layout, height);
         let world_pos = hex_layout.hex_to_world_pos(hex);
 
+        // Spawn hex column with both solid surface and wireframe edges
         commands.spawn((
             Mesh3d(meshes.add(hex_mesh)),
-            MeshMaterial3d(material_handle.clone()),
+            MeshMaterial3d(hex_material.clone()),
             Transform::from_xyz(world_pos.x, height / 2.0, world_pos.y),
+            Wireframe, // Add wireframe component for green edges
         ));
     }
 }
@@ -94,6 +99,13 @@ pub struct LevelPlugin;
 
 impl Plugin for LevelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_hex_grid);
+        app.add_plugins(WireframePlugin::default())
+            .insert_resource(WireframeConfig {
+                // Only show wireframes on entities with Wireframe component
+                global: false,
+                // Set the wireframe color to tactical green
+                default_color: HEX_EDGE_GREEN,
+            })
+            .add_systems(Startup, spawn_hex_grid);
     }
 }

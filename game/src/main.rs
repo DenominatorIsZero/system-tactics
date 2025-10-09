@@ -5,7 +5,7 @@
 
 use bevy::asset::AssetPlugin;
 use bevy::prelude::*;
-use shared::{LevelPlugin, RenderingPlugin};
+use shared::{LIGHT_BACKGROUND, LevelPlugin, RenderingPlugin};
 use tracing::info;
 
 fn main() {
@@ -28,6 +28,7 @@ fn main() {
                     ..default()
                 }),
         )
+        .insert_resource(ClearColor(LIGHT_BACKGROUND))
         .add_plugins(RenderingPlugin)
         .add_plugins(LevelPlugin)
         .add_systems(Update, placeholder_system)

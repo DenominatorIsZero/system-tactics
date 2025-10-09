@@ -314,6 +314,63 @@ Key design principles for SystemTactics development:
 - **Territory Management**: Strategic base-building supports tactical combat
 - **System Apocalypse**: RPG mechanics integrated into world narrative
 
+### Tracing and Debugging Guidelines
+
+**Strategic Tracing**: Add meaningful tracing at key system lifecycle points to aid debugging and development.
+
+**Tracing Levels and Usage**:
+- **info!**: System initialization, level loading, major state changes, resource creation
+- **warn!**: Missing resources, fallback behaviors, configuration issues
+- **debug!**: Detailed state information, frequent but important events (use sparingly)
+- **trace!**: Very verbose, fine-grained debugging (avoid in Update systems)
+
+**Best Practices**:
+- Add tracing to system startup functions (spawn, initialization)
+- Log resource state changes and entity creation with entity IDs
+- Use warn! for missing entities that should exist (easier to spot than debug!)
+- Include relevant context: entity IDs, coordinates, names, counts
+- Avoid tracing in high-frequency Update systems unless using trace! level
+- Always include the system/component name in the message for context
+- **Always use direct variable interpolation in format strings to avoid linting errors**
+
+**String Formatting Convention**:
+Always use direct variable interpolation in format strings. This applies to all macros including `info!`, `warn!`, `debug!`, `trace!`, `format!`, `panic!`, etc.
+
+**Examples**:
+```rust
+// ✅ CORRECT: Direct variable interpolation
+info!("LevelPlugin: Created default level '{level_name}'", level_name = level.name);
+info!("Entity spawned: {entity:?} at position {pos:?}", pos = position);
+warn!("Failed to load {file_name}", file_name = path.display());
+let message = format!("FPS: {fps:.1}", fps = current_fps);
+
+// ✅ CORRECT: Multiple variables with clear naming
+info!("Spawning hex grid for level '{level_name}' ({width}x{height})",
+      level_name = level.name, width = level.width, height = level.height);
+
+// ✅ CORRECT: Format specifiers with direct interpolation
+debug!("Camera rotation: {angle:.2}°", angle = rotation.to_degrees());
+info!("Loaded {count} assets in {time:?}", count = assets.len(), time = elapsed);
+
+// ❌ WRONG: Separate positional arguments (causes clippy::uninlined_format_args)
+info!("Created level '{}'", level.name);
+warn!("Entity count: {}", entities.len());
+let text = format!("Score: {}", player.score);
+
+// ❌ WRONG: Mixed interpolation styles
+info!("Level '{}' has {entity_count} entities", level.name, entity_count = count);
+
+// ✅ CORRECT: Simple static messages (no interpolation needed)
+warn!("No camera found for positioning level name UI");
+info!("System initialization completed");
+```
+
+**Key Rules**:
+1. **All variables must be explicitly named**: Use `{variable_name}` with `variable_name = value`
+2. **No positional arguments**: Never use `{}` with separate arguments
+3. **Consistent naming**: Variable names in format string should match parameter names
+4. **Format specifiers**: Use `{var:.2}`, `{var:?}`, etc. with named parameters
+
 ### WASM Optimization
 
 - Use `just build-web` for production deployment (includes release optimizations)

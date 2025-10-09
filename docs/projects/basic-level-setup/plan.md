@@ -87,15 +87,41 @@ Add camera controls, level editor integration, and polish.
 
 ### Task 6: Level Data Structure
 
-**Goal**: Replace hardcoded grid with actual Level struct.
+**Goal**: Replace hardcoded grid with actual Level struct and add level management system.
 
-- [ ] Add ndarray dependency to shared/Cargo.toml
-- [ ] Create minimal Level struct in shared/src/level.rs
-- [ ] Implement Level::new() and basic height access
-- [ ] Export from shared/src/lib.rs
-- [ ] Use Level resource in game to drive hex generation
+#### Subtask 6.1: Basic Level Struct and Display ✅
+- [x] Add toml and ndarray dependencies to shared/Cargo.toml
+- [x] Create Level struct with grid data and constructor in shared/src/level.rs
+  - Grid size parameters (width, height)
+  - Height data using ndarray::Array2<f32>
+  - Level name field
+  - Level::new(name, width, height) constructor that replicates current gradient
+- [x] Add UI text system to display level name in bottom-right corner
+- [x] Replace hardcoded hex grid generation with Level resource
+- [x] Export from shared/src/lib.rs
 
-**Test**: Game still shows hex grid, but now driven by Level struct data.
+**Test**: Game still shows same 10x10 grid but driven by Level struct, with level name displayed. ✅
+
+#### Subtask 6.2: Level Serialization and Asset Loading
+- [ ] Add TOML serialization support with serde derives
+- [ ] Create assets/levels/ directory structure
+- [ ] Create sample level files (default.toml, test_small.toml, test_large.toml)
+- [ ] Implement level loading system that reads all TOML files from assets/levels/
+- [ ] Add LevelsResource containing Vec<Level> of all available levels
+- [ ] Add current level index tracking
+
+**Test**: Game loads levels from TOML files and can access multiple levels.
+
+#### Subtask 6.3: Level Cycling System
+- [ ] Implement left/right arrow key input handling
+- [ ] Add level switching system that:
+  - Despawns current hex grid entities
+  - Loads new level from LevelsResource
+  - Spawns new hex grid based on selected level
+  - Updates level name display
+- [ ] Add smooth transitions between levels
+
+**Test**: Can cycle through multiple levels with left/right arrows, each showing different sizes and names.
 
 ### Task 7: Variable Heights
 

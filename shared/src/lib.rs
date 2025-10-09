@@ -8,5 +8,5 @@ pub mod rendering;
 
 // Re-export commonly used types
 pub use colors::*;
-pub use level::*;
+pub use level::*; // Export all level-related types and functions
 pub use rendering::*;

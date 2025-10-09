@@ -5,11 +5,15 @@
 
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
-use tracing::debug;
+use tracing::{debug, info};
 
 /// Component to mark the tactical camera for movement controls
 #[derive(Component)]
 pub struct TacticalCamera;
+
+/// Component to mark the FPS counter display text
+#[derive(Component)]
+pub struct FpsDisplay;
 
 /// Resource to track camera rotation state for smooth animations
 #[derive(Resource, Default)]
@@ -263,13 +267,55 @@ pub fn camera_rotation_animation_system(
     }
 }
 
+/// System to spawn the FPS counter in the top-left corner
+pub fn spawn_fps_counter(mut commands: Commands) {
+    info!("Spawning FPS counter UI");
+
+    let entity = commands
+        .spawn((
+            Text::new("FPS: --"),
+            TextFont {
+                font_size: 20.0,
+                ..default()
+            },
+            TextColor(crate::colors::YELLOW_ACCENT),
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(20.0),
+                left: Val::Px(20.0),
+                ..default()
+            },
+            FpsDisplay,
+        ))
+        .id();
+
+    info!("FPS counter UI entity spawned: {entity:?} at top-left corner");
+}
+
+/// System to update the FPS counter display
+pub fn update_fps_display(
+    diagnostics: Res<bevy::diagnostic::DiagnosticsStore>,
+    mut text_query: Query<&mut Text, With<FpsDisplay>>,
+) {
+    for mut text in text_query.iter_mut() {
+        if let Some(fps_diagnostic) =
+            diagnostics.get(&bevy::diagnostic::FrameTimeDiagnosticsPlugin::FPS)
+        {
+            if let Some(fps_smoothed) = fps_diagnostic.smoothed() {
+                **text = format!("FPS: {fps_smoothed:.1}");
+            }
+        }
+    }
+}
+
 /// Plugin for rendering setup (camera and lighting)
 pub struct RenderingPlugin;
 
 impl Plugin for RenderingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CameraRotationState>()
-            .add_systems(Startup, (setup_camera, setup_lighting))
+            .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
+            .add_systems(Startup, (setup_camera, setup_lighting, spawn_fps_counter))
             .add_systems(
                 Update,
                 (
@@ -277,6 +323,7 @@ impl Plugin for RenderingPlugin {
                     camera_zoom_system,
                     camera_rotation_input_system,
                     camera_rotation_animation_system,
+                    update_fps_display,
                 ),
             );
     }

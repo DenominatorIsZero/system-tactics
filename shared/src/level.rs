@@ -208,6 +208,10 @@ pub fn load_levels_from_directory(levels_dir: &str) -> Result<LevelsResource> {
 #[derive(Component)]
 pub struct LevelNameDisplay;
 
+/// Component to mark hex grid entities for easy despawning during level changes
+#[derive(Component)]
+pub struct HexGridEntity;
+
 /// System to spawn the level name UI text in the bottom-right corner
 pub fn spawn_level_name_ui(mut commands: Commands, levels_resource: Res<LevelsResource>) {
     let level = levels_resource.current_level();
@@ -272,12 +276,105 @@ pub fn create_hex_column_mesh(layout: &HexLayout, height: f32) -> Mesh {
     .with_inserted_indices(Indices::U16(mesh_info.indices))
 }
 
-/// System to spawn hex grid based on the LevelsResource
+/// System to spawn hex grid based on the LevelsResource (used for initial spawn)
 pub fn spawn_hex_grid(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     levels_resource: Res<LevelsResource>,
+) {
+    spawn_hex_grid_internal(&mut commands, &mut meshes, &mut materials, &levels_resource);
+}
+
+/// System to handle left/right arrow key input for level cycling
+pub fn level_cycling_input_system(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    mut levels_resource: ResMut<LevelsResource>,
+) {
+    let level_count = levels_resource.level_count();
+
+    // Only process input if we have multiple levels
+    if level_count <= 1 {
+        return;
+    }
+
+    if keyboard_input.just_pressed(KeyCode::ArrowLeft) {
+        // Cycle to previous level (with wraparound)
+        let new_index = if levels_resource.current_level_index == 0 {
+            level_count - 1
+        } else {
+            levels_resource.current_level_index - 1
+        };
+
+        let old_level_name = levels_resource.current_level().name.clone();
+        levels_resource.current_level_index = new_index;
+        let new_level_name = &levels_resource.current_level().name;
+
+        info!(
+            "Level cycling: Previous (←) - switched from '{old_name}' to '{new_name}' (index {new_index})",
+            old_name = old_level_name,
+            new_name = new_level_name
+        );
+    }
+
+    if keyboard_input.just_pressed(KeyCode::ArrowRight) {
+        // Cycle to next level (with wraparound)
+        let new_index = (levels_resource.current_level_index + 1) % level_count;
+
+        let old_level_name = levels_resource.current_level().name.clone();
+        levels_resource.current_level_index = new_index;
+        let new_level_name = &levels_resource.current_level().name;
+
+        info!(
+            "Level cycling: Next (→) - switched from '{old_name}' to '{new_name}' (index {new_index})",
+            old_name = old_level_name,
+            new_name = new_level_name
+        );
+    }
+}
+
+/// System to handle level switching by despawning old hex grid and spawning new one
+pub fn level_switching_system(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    levels_resource: Res<LevelsResource>,
+    hex_grid_query: Query<Entity, With<HexGridEntity>>,
+) {
+    // Only trigger when LevelsResource has actually changed
+    if !levels_resource.is_changed() {
+        return;
+    }
+
+    let level = levels_resource.current_level();
+    info!(
+        "Level switched: Despawning old hex grid and spawning new grid for '{level_name}'",
+        level_name = level.name
+    );
+
+    // Despawn all existing hex grid entities
+    let despawn_count = hex_grid_query.iter().count();
+    for entity in hex_grid_query.iter() {
+        commands.entity(entity).despawn();
+    }
+
+    if despawn_count > 0 {
+        info!(
+            "Despawned {count} hex grid entities from previous level",
+            count = despawn_count
+        );
+    }
+
+    // Spawn new hex grid for the current level using existing logic
+    spawn_hex_grid_internal(&mut commands, &mut meshes, &mut materials, &levels_resource);
+}
+
+/// Internal function to spawn hex grid (extracted from spawn_hex_grid for reuse)
+fn spawn_hex_grid_internal(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+    levels_resource: &Res<LevelsResource>,
 ) {
     let level = levels_resource.current_level();
     info!(
@@ -316,7 +413,8 @@ pub fn spawn_hex_grid(
             Mesh3d(meshes.add(hex_mesh)),
             MeshMaterial3d(hex_material.clone()),
             Transform::from_xyz(world_pos.x, height / 2.0, world_pos.y),
-            Wireframe, // Add wireframe component for green edges
+            Wireframe,     // Add wireframe component for green edges
+            HexGridEntity, // Mark as hex grid entity for level cycling
         ));
     }
 
@@ -353,7 +451,14 @@ impl Plugin for LevelPlugin {
             })
             .insert_resource(levels_resource)
             .add_systems(Startup, (spawn_hex_grid, spawn_level_name_ui))
-            .add_systems(Update, update_level_name_display);
+            .add_systems(
+                Update,
+                (
+                    level_cycling_input_system,
+                    level_switching_system,
+                    update_level_name_display,
+                ),
+            );
 
         info!("LevelPlugin: Plugin setup completed");
     }

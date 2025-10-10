@@ -90,6 +90,7 @@ Add camera controls, level editor integration, and polish.
 **Goal**: Replace hardcoded grid with actual Level struct and add level management system.
 
 #### Subtask 6.1: Basic Level Struct and Display ✅
+
 - [x] Add toml and ndarray dependencies to shared/Cargo.toml
 - [x] Create Level struct with grid data and constructor in shared/src/level.rs
   - Grid size parameters (width, height)
@@ -103,6 +104,7 @@ Add camera controls, level editor integration, and polish.
 **Test**: Game still shows same 10x10 grid but driven by Level struct, with level name displayed. ✅
 
 #### Subtask 6.2: Level Serialization and Asset Loading ✅
+
 - [x] Add TOML serialization support with serde derives
 - [x] Create assets/levels/ directory structure
 - [x] Create sample level files (default.toml, test_small.toml, test_large.toml)
@@ -115,15 +117,18 @@ Add camera controls, level editor integration, and polish.
 **Test**: Game loads levels from TOML files and can access multiple levels. ✅
 
 #### Subtask 6.3: Level Cycling System
-- [ ] Implement left/right arrow key input handling
-- [ ] Add level switching system that:
+
+- [x] Implement left/right arrow key input handling
+- [x] Add level switching system that:
   - Despawns current hex grid entities
   - Loads new level from LevelsResource
   - Spawns new hex grid based on selected level
-  - Updates level name display
-- [ ] Add smooth transitions between levels
+  - Updates level name display (should run automatically)
+- [ ] Add smooth transitions between levels (deferred for future enhancement)
 
-**Test**: Can cycle through multiple levels with left/right arrows, each showing different sizes and names.
+**Test**: Can cycle through multiple levels with left/right arrows, each showing different sizes and names. ✅
+
+**Implementation Notes**: Added `HexGridEntity` component marker, `level_cycling_input_system` for arrow key handling, and `level_switching_system` for despawn/respawn logic. All systems integrated into `LevelPlugin`. Smooth transitions skipped for now - will implement fancy hex animations later.
 
 ### Task 7: Variable Heights
 

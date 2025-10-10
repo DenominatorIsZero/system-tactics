@@ -102,15 +102,17 @@ Add camera controls, level editor integration, and polish.
 
 **Test**: Game still shows same 10x10 grid but driven by Level struct, with level name displayed. ✅
 
-#### Subtask 6.2: Level Serialization and Asset Loading
-- [ ] Add TOML serialization support with serde derives
-- [ ] Create assets/levels/ directory structure
-- [ ] Create sample level files (default.toml, test_small.toml, test_large.toml)
-- [ ] Implement level loading system that reads all TOML files from assets/levels/
-- [ ] Add LevelsResource containing Vec<Level> of all available levels
-- [ ] Add current level index tracking
+#### Subtask 6.2: Level Serialization and Asset Loading ✅
+- [x] Add TOML serialization support with serde derives
+- [x] Create assets/levels/ directory structure
+- [x] Create sample level files (default.toml, test_small.toml, test_large.toml)
+- [x] Implement level loading system that reads all TOML files from assets/levels/
+- [x] Add LevelsResource containing Vec<Level> of all available levels
+- [x] Add current level index tracking
+- [x] Add proper test isolation using temporary files
+- [x] Add enhanced Level API with save_to_directory() and load_from_directory()
 
-**Test**: Game loads levels from TOML files and can access multiple levels.
+**Test**: Game loads levels from TOML files and can access multiple levels. ✅
 
 #### Subtask 6.3: Level Cycling System
 - [ ] Implement left/right arrow key input handling

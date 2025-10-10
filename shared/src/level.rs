@@ -3,6 +3,7 @@
 //! Shared level creation functionality for spawning hex-based level geometry
 //! in both the game and level editor applications.
 
+use anyhow::{Context, Result};
 use bevy::pbr::wireframe::{Wireframe, WireframeConfig, WireframePlugin};
 use bevy::prelude::*;
 use bevy::render::{
@@ -12,7 +13,8 @@ use bevy::render::{
 use hexx::{ColumnMeshBuilder, Hex, HexLayout};
 use ndarray::Array2;
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use std::fs;
+use tracing::{info, warn};
 
 use crate::colors::*;
 
@@ -73,6 +75,133 @@ impl Level {
         }
         grid
     }
+
+    /// Save this level to a TOML file in the assets/levels/ directory
+    pub fn save_to_file(&self, filename: &str) -> Result<()> {
+        self.save_to_directory("assets/levels", filename)
+    }
+
+    /// Save this level to a TOML file in the specified directory
+    pub fn save_to_directory(&self, directory: &str, filename: &str) -> Result<()> {
+        // Create the directory if it doesn't exist
+        std::fs::create_dir_all(directory)
+            .with_context(|| format!("Failed to create directory: {directory}"))?;
+
+        let file_path = format!("{directory}/{filename}");
+        let toml_content =
+            toml::to_string(self).with_context(|| "Failed to serialize level to TOML")?;
+
+        fs::write(&file_path, toml_content)
+            .with_context(|| format!("Failed to write level to file: {file_path}"))?;
+
+        info!(
+            "Saved level '{level_name}' to {file_path}",
+            level_name = self.name
+        );
+        Ok(())
+    }
+}
+
+/// Resource containing all available levels and tracking the current level
+#[derive(Resource, Debug)]
+pub struct LevelsResource {
+    /// All available levels loaded from TOML files
+    pub levels: Vec<Level>,
+    /// Index of the currently active level
+    pub current_level_index: usize,
+}
+
+impl LevelsResource {
+    /// Create a new LevelsResource with a single default level
+    pub fn with_default() -> Self {
+        let default_level = Level::new("Default Level".to_string(), 10, 10);
+        info!("LevelsResource: Created with fallback default level");
+        Self {
+            levels: vec![default_level],
+            current_level_index: 0,
+        }
+    }
+
+    /// Get the currently active level
+    pub fn current_level(&self) -> &Level {
+        &self.levels[self.current_level_index]
+    }
+
+    /// Get the total number of available levels
+    pub fn level_count(&self) -> usize {
+        self.levels.len()
+    }
+}
+
+/// Load all level files from the assets/levels/ directory
+pub fn load_levels_from_assets() -> Result<LevelsResource> {
+    load_levels_from_directory("assets/levels")
+}
+
+/// Load all level files from a specific directory
+pub fn load_levels_from_directory(levels_dir: &str) -> Result<LevelsResource> {
+    info!("Loading level files from directory: {levels_dir}");
+
+    // Check if the levels directory exists
+    if fs::metadata(levels_dir).is_err() {
+        warn!("Levels directory '{levels_dir}' not found, using default level");
+        return Ok(LevelsResource::with_default());
+    }
+
+    // Read all TOML files from the levels directory
+    let entries = fs::read_dir(levels_dir)
+        .with_context(|| format!("Failed to read levels directory: {levels_dir}"))?;
+
+    let mut levels = Vec::new();
+
+    for entry in entries {
+        let entry = entry.with_context(|| "Failed to read directory entry")?;
+        let path = entry.path();
+
+        // Only process .toml files
+        if path.extension().and_then(|s| s.to_str()) == Some("toml") {
+            let file_name = path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown");
+            info!("Loading level file: {file_name}");
+
+            match fs::read_to_string(&path) {
+                Ok(content) => match toml::from_str::<Level>(&content) {
+                    Ok(level) => {
+                        info!(
+                            "Successfully loaded level: '{level_name}' ({width}x{height})",
+                            level_name = level.name,
+                            width = level.width,
+                            height = level.height
+                        );
+                        levels.push(level);
+                    }
+                    Err(err) => {
+                        warn!("Failed to parse TOML in {file_name}: {err}");
+                    }
+                },
+                Err(err) => {
+                    warn!("Failed to read file {file_name}: {err}");
+                }
+            }
+        }
+    }
+
+    // If no levels were loaded successfully, use default
+    if levels.is_empty() {
+        warn!("No valid level files found, using default level");
+        return Ok(LevelsResource::with_default());
+    }
+
+    // Sort levels by name for consistent ordering
+    levels.sort_by(|a, b| a.name.cmp(&b.name));
+
+    info!("Successfully loaded {count} levels", count = levels.len());
+    Ok(LevelsResource {
+        levels,
+        current_level_index: 0,
+    })
 }
 
 /// Component to mark the level name display text
@@ -80,7 +209,8 @@ impl Level {
 pub struct LevelNameDisplay;
 
 /// System to spawn the level name UI text in the bottom-right corner
-pub fn spawn_level_name_ui(mut commands: Commands, level: Res<Level>) {
+pub fn spawn_level_name_ui(mut commands: Commands, levels_resource: Res<LevelsResource>) {
+    let level = levels_resource.current_level();
     info!(
         "Spawning level name UI for level: '{level_name}'",
         level_name = level.name
@@ -108,12 +238,13 @@ pub fn spawn_level_name_ui(mut commands: Commands, level: Res<Level>) {
     info!("Level name UI entity spawned: {entity:?} at bottom-right corner");
 }
 
-/// System to update the level name display when the level changes
+/// System to update the level name display when the levels resource changes
 pub fn update_level_name_display(
-    level: Res<Level>,
+    levels_resource: Res<LevelsResource>,
     mut text_query: Query<&mut Text, With<LevelNameDisplay>>,
 ) {
-    if level.is_changed() {
+    if levels_resource.is_changed() {
+        let level = levels_resource.current_level();
         info!(
             "Level changed, updating level name display to: '{level_name}'",
             level_name = level.name
@@ -141,13 +272,14 @@ pub fn create_hex_column_mesh(layout: &HexLayout, height: f32) -> Mesh {
     .with_inserted_indices(Indices::U16(mesh_info.indices))
 }
 
-/// System to spawn hex grid based on the Level resource
+/// System to spawn hex grid based on the LevelsResource
 pub fn spawn_hex_grid(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    level: Res<Level>,
+    levels_resource: Res<LevelsResource>,
 ) {
+    let level = levels_resource.current_level();
     info!(
         "Spawning hex grid for level '{level_name}' ({width}x{height})",
         level_name = level.name,
@@ -196,12 +328,21 @@ pub struct LevelPlugin;
 
 impl Plugin for LevelPlugin {
     fn build(&self, app: &mut App) {
-        // Create a default 10x10 level to match the current behavior
-        let default_level = Level::new("Default Level".to_string(), 10, 10);
-        info!(
-            "LevelPlugin: Created default level '{level_name}'",
-            level_name = default_level.name
-        );
+        // Load levels from assets or fallback to default
+        let levels_resource = match load_levels_from_assets() {
+            Ok(levels) => {
+                info!(
+                    "LevelPlugin: Successfully loaded {count} levels from assets",
+                    count = levels.level_count()
+                );
+                levels
+            }
+            Err(err) => {
+                warn!("LevelPlugin: Failed to load levels from assets: {err}");
+                warn!("LevelPlugin: Using fallback default level");
+                LevelsResource::with_default()
+            }
+        };
 
         app.add_plugins(WireframePlugin::default())
             .insert_resource(WireframeConfig {
@@ -210,10 +351,125 @@ impl Plugin for LevelPlugin {
                 // Set the wireframe color to tactical green
                 default_color: HEX_EDGE_GREEN,
             })
-            .insert_resource(default_level)
+            .insert_resource(levels_resource)
             .add_systems(Startup, (spawn_hex_grid, spawn_level_name_ui))
             .add_systems(Update, update_level_name_display);
 
         info!("LevelPlugin: Plugin setup completed");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_level_save_and_load_roundtrip() {
+        // Create a temporary directory for this test
+        let temp_dir = TempDir::new().expect("Failed to create temporary directory");
+        let temp_path = temp_dir.path().to_str().expect("Failed to get temp path");
+
+        // Create test levels
+        let default_level = Level::new("Default Level".to_string(), 10, 10);
+        let small_level = Level::new("Small Test Level".to_string(), 5, 5);
+        let large_level = Level::new("Large Test Level".to_string(), 15, 15);
+
+        // Save all levels to TOML files in the temporary directory
+        default_level
+            .save_to_directory(temp_path, "default.toml")
+            .expect("Failed to save default level");
+        small_level
+            .save_to_directory(temp_path, "test_small.toml")
+            .expect("Failed to save small level");
+        large_level
+            .save_to_directory(temp_path, "test_large.toml")
+            .expect("Failed to save large level");
+
+        // Load levels back from the temporary directory
+        let levels_resource = load_levels_from_directory(temp_path)
+            .expect("Failed to load levels from temp directory");
+
+        // Verify we loaded 3 levels
+        assert_eq!(
+            levels_resource.level_count(),
+            3,
+            "Should have loaded 3 levels"
+        );
+
+        // Verify each level was loaded correctly by checking names
+        let level_names: Vec<&str> = levels_resource
+            .levels
+            .iter()
+            .map(|l| l.name.as_str())
+            .collect();
+        assert!(
+            level_names.contains(&"Default Level"),
+            "Should contain Default Level"
+        );
+        assert!(
+            level_names.contains(&"Small Test Level"),
+            "Should contain Small Test Level"
+        );
+        assert!(
+            level_names.contains(&"Large Test Level"),
+            "Should contain Large Test Level"
+        );
+
+        // Test one specific level for correctness (default level)
+        let loaded_default = levels_resource
+            .levels
+            .iter()
+            .find(|l| l.name == "Default Level")
+            .expect("Default level should be found");
+
+        assert_eq!(loaded_default.width, 10, "Default level width should be 10");
+        assert_eq!(
+            loaded_default.height, 10,
+            "Default level height should be 10"
+        );
+        assert_eq!(
+            loaded_default.heights.shape(),
+            &[10, 10],
+            "Default level heights should be 10x10"
+        );
+
+        // Test that height data is preserved (check a few specific values)
+        assert!(
+            (loaded_default.heights[(0, 0)] - 1.0).abs() < 0.001,
+            "First height should be ~1.0"
+        );
+        assert!(
+            (loaded_default.heights[(9, 9)] - 4.0).abs() < 0.001,
+            "Last height should be ~4.0"
+        );
+
+        // The temporary directory will be automatically cleaned up when temp_dir goes out of scope
+    }
+
+    #[test]
+    fn test_levels_resource_current_level() {
+        let level1 = Level::new("Level 1".to_string(), 5, 5);
+        let level2 = Level::new("Level 2".to_string(), 7, 7);
+
+        let levels_resource = LevelsResource {
+            levels: vec![level1, level2],
+            current_level_index: 0,
+        };
+
+        assert_eq!(levels_resource.current_level().name, "Level 1");
+        assert_eq!(levels_resource.level_count(), 2);
+    }
+
+    #[test]
+    fn test_fallback_to_default_when_no_files() {
+        // Try to load from a nonexistent directory
+        let nonexistent_dir = "/tmp/nonexistent_levels_dir_12345";
+
+        let levels_resource =
+            load_levels_from_directory(nonexistent_dir).expect("Should fallback to default");
+
+        assert_eq!(levels_resource.level_count(), 1);
+        assert_eq!(levels_resource.current_level().name, "Default Level");
     }
 }

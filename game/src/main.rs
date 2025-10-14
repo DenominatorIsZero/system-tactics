@@ -6,6 +6,7 @@
 use bevy::asset::AssetPlugin;
 use bevy::prelude::*;
 use shared::colors::LIGHT_BACKGROUND;
+use shared::input::InputPlugin;
 use shared::level::LevelPlugin;
 use shared::rendering::RenderingPlugin;
 use tracing::info;
@@ -31,6 +32,7 @@ fn main() {
                 }),
         )
         .insert_resource(ClearColor(LIGHT_BACKGROUND))
+        .add_plugins(InputPlugin)
         .add_plugins(RenderingPlugin)
         .add_plugins(LevelPlugin)
         .add_systems(Update, placeholder_system)

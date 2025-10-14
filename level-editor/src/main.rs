@@ -5,6 +5,7 @@
 
 use bevy::asset::AssetPlugin;
 use bevy::prelude::*;
+use shared::input::InputPlugin;
 use shared::level::LevelPlugin;
 use shared::rendering::RenderingPlugin;
 use tracing::info;
@@ -27,6 +28,7 @@ fn main() {
                     ..default()
                 }),
         )
+        .add_plugins(InputPlugin)
         .add_plugins(RenderingPlugin)
         .add_plugins(LevelPlugin)
         .add_systems(Update, placeholder_editor_system)

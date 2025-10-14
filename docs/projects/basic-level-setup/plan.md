@@ -134,7 +134,7 @@ Add camera controls, level editor integration, and polish.
 
 **Goal**: Make camera controls feel polished.
 
-- [ ] Add panning using mouse + right mb
+- [x] Add panning using mouse + right mb
 - [x] On level load reposition camera and zoom level so that the level is centered, and the level fills the screen optimally.
 - [ ] Add camera bounds to prevent moving too far from level
 - [ ] Tune movement speeds for good feel

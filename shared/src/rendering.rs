@@ -308,6 +308,47 @@ pub fn update_fps_display(
     }
 }
 
+/// System to log current camera position and settings when 'C' key is pressed
+pub fn debug_camera_logging_system(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    camera_query: Query<(&Transform, &Projection), With<TacticalCamera>>,
+    levels_resource: Res<crate::level::LevelsResource>,
+) {
+    // Only trigger on 'C' key press (not hold)
+    if keyboard_input.just_pressed(KeyCode::KeyC) {
+        if let Ok((transform, projection)) = camera_query.single() {
+            let level = levels_resource.current_level();
+
+            // Get orthographic scale
+            let scale = match projection {
+                Projection::Orthographic(ortho) => ortho.scale,
+                _ => 0.0,
+            };
+
+            // Convert rotation quaternion to readable angles (in degrees)
+            // EulerRot::YXZ order: Y(yaw), X(pitch), Z(roll)
+            let (yaw, pitch, roll) = transform.rotation.to_euler(EulerRot::YXZ);
+            let yaw_deg = yaw.to_degrees();
+            let pitch_deg = pitch.to_degrees();
+            let roll_deg = roll.to_degrees();
+
+            // Log detailed camera debug information
+            info!(
+                "CAMERA_DEBUG: Level='{level_name}' ({width}x{height}) | Pos=({pos_x:.3}, {pos_y:.3}, {pos_z:.3}) | Scale={scale:.6} | Rotation=({yaw:.1}°, {pitch:.1}°, {roll:.1}°)",
+                level_name = level.name,
+                width = level.width,
+                height = level.height,
+                pos_x = transform.translation.x,
+                pos_y = transform.translation.y,
+                pos_z = transform.translation.z,
+                pitch = pitch_deg,
+                yaw = yaw_deg,
+                roll = roll_deg
+            );
+        }
+    }
+}
+
 /// Plugin for rendering setup (camera and lighting)
 pub struct RenderingPlugin;
 
@@ -324,6 +365,7 @@ impl Plugin for RenderingPlugin {
                     camera_rotation_input_system,
                     camera_rotation_animation_system,
                     update_fps_display,
+                    debug_camera_logging_system,
                 ),
             );
     }

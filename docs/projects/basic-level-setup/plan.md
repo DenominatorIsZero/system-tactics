@@ -130,38 +130,18 @@ Add camera controls, level editor integration, and polish.
 
 **Implementation Notes**: Added `HexGridEntity` component marker, `level_cycling_input_system` for arrow key handling, and `level_switching_system` for despawn/respawn logic. All systems integrated into `LevelPlugin`. Smooth transitions skipped for now - will implement fancy hex animations later.
 
-### Task 7: Variable Heights
-
-**Goal**: Show different height hexes to prove the system works.
-
-- [ ] Update Level to support different heights per hex
-- [ ] Create test level with varied heights (some 1, some 2, some 3)
-- [ ] Update hex spawning to use actual heights from Level
-- [ ] Test that taller hexes are visibly taller
-
-**Test**: Hex grid shows varied heights creating interesting terrain.
-
 ### Task 8: Enhanced Camera Controls
 
 **Goal**: Make camera controls feel polished.
 
+- [ ] Add panning using mouse + right mb
+- [x] On level load reposition camera and zoom level so that the level is centered, and the level fills the screen optimally.
 - [ ] Add camera bounds to prevent moving too far from level
-- [ ] Add smooth movement and zoom (acceleration/deceleration)
 - [ ] Tune movement speeds for good feel
 - [ ] Add zoom limits (min/max distance)
 - [ ] **Update camera rotation system to use hex raycasting** (currently uses XZ plane intersection which is inaccurate for variable height hexes - needs Level data structure from Task 6)
 
 **Test**: Camera controls feel smooth and stay appropriately bounded. Rotation centers correctly on the hex the camera is actually viewing.
-
-### Task 9: Level Editor Integration
-
-**Goal**: Get level editor showing the same thing.
-
-- [ ] Copy rendering system to level-editor binary
-- [ ] Test that level editor shows identical hex grid
-- [ ] Both use same Level resource and systems
-
-**Test**: `just run-level-editor` shows identical hex grid visualization.
 
 ### Task 10: WASM and Polish
 
@@ -171,6 +151,7 @@ Add camera controls, level editor integration, and polish.
 - [ ] Move shared code to proper locations
 - [ ] Add tests for core functionality
 - [ ] Run quality checks and fix issues
+- [ ] Refactor files. Split into more units to make code easier to navigate.
 
 **Test**: `just wasm` works and shows hex grid in browser with acceptable performance.
 

@@ -76,6 +76,102 @@ impl Level {
         grid
     }
 
+    /// Returns the standard hex layout configuration used throughout the tactical RPG
+    ///
+    /// Uses pointy orientation with 1.0 scale for consistent hex positioning across
+    /// all level operations (bounds calculation, rendering, camera positioning, etc.)
+    pub fn hex_layout() -> HexLayout {
+        HexLayout::pointy().with_scale(Vec2::splat(1.0))
+    }
+
+    /// Calculate the world-space bounding box of this level's hex grid
+    pub fn get_world_bounds(&self) -> (Vec3, Vec3) {
+        let hex_layout = Self::hex_layout();
+
+        let mut min_bounds = Vec3::new(f32::MAX, f32::MAX, f32::MAX);
+        let mut max_bounds = Vec3::new(f32::MIN, f32::MIN, f32::MIN);
+
+        // Calculate bounds by checking all hex positions
+        for hex in self.get_hex_grid() {
+            let world_pos = hex_layout.hex_to_world_pos(hex);
+            let height = self.get_height(hex);
+
+            // Convert to 3D world position (hex uses XZ plane, height is Y)
+            let hex_world_pos = Vec3::new(world_pos.x, height, world_pos.y);
+
+            min_bounds = min_bounds.min(hex_world_pos);
+            max_bounds = max_bounds.max(hex_world_pos);
+        }
+
+        (min_bounds, max_bounds)
+    }
+
+    /// Get the center hex coordinates for this level (handles all dimension cases)
+    pub fn get_center_hexes(&self) -> Vec<Hex> {
+        match (self.width % 2, self.height % 2) {
+            (1, 1) => {
+                // Odd × Odd: single center hex
+                vec![Hex::new(self.width / 2, self.height / 2)]
+            }
+            (0, 0) => {
+                // Even × Even: 4 center hexes
+                let w_half = self.width / 2;
+                let h_half = self.height / 2;
+                vec![
+                    Hex::new(w_half - 1, h_half - 1),
+                    Hex::new(w_half, h_half - 1),
+                    Hex::new(w_half - 1, h_half),
+                    Hex::new(w_half, h_half),
+                ]
+            }
+            (0, 1) => {
+                // Even × Odd: 2 center hexes
+                let w_half = self.width / 2;
+                let h_center = self.height / 2;
+                vec![Hex::new(w_half - 1, h_center), Hex::new(w_half, h_center)]
+            }
+            (1, 0) => {
+                // Odd × Even: 2 center hexes
+                let w_center = self.width / 2;
+                let h_half = self.height / 2;
+                vec![Hex::new(w_center, h_half - 1), Hex::new(w_center, h_half)]
+            }
+            _ => {
+                // Fallback for invalid dimensions (should not happen with valid levels)
+                vec![Hex::new(self.width / 2, self.height / 2)]
+            }
+        }
+    }
+
+    /// Get the center world position (average of center hexes)
+    pub fn get_center_world_pos(&self) -> Vec3 {
+        let center_hexes = self.get_center_hexes();
+        let hex_layout = Self::hex_layout();
+
+        let mut total_pos = Vec3::ZERO;
+        let count = center_hexes.len() as f32;
+
+        // Average the 3D positions of all center hexes
+        for hex in center_hexes {
+            let world_pos_2d = hex_layout.hex_to_world_pos(hex);
+            let height = self.get_height(hex);
+            total_pos += Vec3::new(world_pos_2d.x, height, world_pos_2d.y);
+        }
+
+        total_pos / count
+    }
+
+    /// Get the 3D diagonal extent of this level for isometric camera calculations
+    pub fn get_level_diagonal_extent(&self) -> f32 {
+        let (min_bounds, max_bounds) = self.get_world_bounds();
+        let width = max_bounds.x - min_bounds.x; // X axis
+        let depth = max_bounds.z - min_bounds.z; // Z axis for depth
+        let height = max_bounds.y - min_bounds.y; // Y axis for vertical extent
+
+        // For isometric view, we need the true 3D diagonal including height
+        (width * width + depth * depth + height * height).sqrt()
+    }
+
     /// Save this level to a TOML file in the assets/levels/ directory
     pub fn save_to_file(&self, filename: &str) -> Result<()> {
         self.save_to_directory("assets/levels", filename)
@@ -384,8 +480,8 @@ fn spawn_hex_grid_internal(
         height = level.height
     );
 
-    // Pointy orientation hex layout for proper tactical RPG alignment
-    let hex_layout = HexLayout::pointy().with_scale(Vec2::splat(1.0));
+    // Use centralized hex layout configuration for consistency
+    let hex_layout = Level::hex_layout();
 
     // Create tactical gray material for hex surfaces
     let hex_material = materials.add(StandardMaterial {
@@ -420,6 +516,103 @@ fn spawn_hex_grid_internal(
 
     info!("Hex grid spawning completed");
 }
+
+/// System to automatically position and zoom camera for optimal level viewing when level changes
+pub fn position_camera_for_level_system(
+    levels_resource: Res<LevelsResource>,
+    mut camera_query: Query<
+        (&mut Transform, &mut Projection),
+        With<crate::rendering::TacticalCamera>,
+    >,
+    windows: Query<&Window>,
+) {
+    // Only trigger when LevelsResource has actually changed
+    if !levels_resource.is_changed() {
+        return;
+    }
+
+    if let Ok((mut transform, mut projection)) = camera_query.single_mut() {
+        let level = levels_resource.current_level();
+
+        // Get center world position (handles all dimension cases)
+        let center_pos = level.get_center_world_pos();
+
+        // Calculate camera height as center position height + 20 units
+        let camera_height = center_pos.y + 20.0;
+
+        // Use camera's actual forward vector for inverse raycast
+        let camera_forward = transform.forward();
+
+        // Inverse raycast: center_pos = camera_pos + t * camera_forward
+        // Solve for t: we want ray to hit the center position
+        let height_diff = camera_height - center_pos.y;
+        let t = height_diff / (-camera_forward.y); // Negative because forward points down
+
+        // Calculate camera XZ position using inverse raycast
+        let camera_x = center_pos.x - t * camera_forward.x;
+        let camera_z = center_pos.z - t * camera_forward.z;
+        let camera_pos = Vec3::new(camera_x, camera_height, camera_z);
+
+        // Viewport-aware scale calculation using level diagonal extent
+        let window = match windows.iter().next() {
+            Some(window) => window,
+            None => {
+                warn!("No window available for camera positioning");
+                return; // No window available, skip camera positioning
+            }
+        };
+        let viewport_width = window.width();
+        let viewport_height = window.height();
+
+        // Determine viewport dimension based on camera Y rotation
+        // Extract Y rotation from camera transform
+        let (yaw, _, _) = transform.rotation.to_euler(bevy::math::EulerRot::YXZ);
+        let yaw_degrees = yaw.to_degrees();
+
+        // Normalize angle to 0-360 range for easier comparison
+        let normalized_yaw = if yaw_degrees < 0.0 {
+            yaw_degrees + 360.0
+        } else {
+            yaw_degrees
+        };
+
+        // Check if camera is rotated to portrait orientation (±90° from default)
+        // Default starts at -45° (315°), so portrait orientations are around 45° and 225°
+        let is_portrait = (normalized_yaw >= 35.0 && normalized_yaw <= 55.0) ||
+                         (normalized_yaw >= 215.0 && normalized_yaw <= 235.0);
+
+        let viewport_size = if is_portrait {
+            window.height()
+        } else {
+            window.width()
+        };
+
+        // Get diagonal extent of level in world units
+        let level_diagonal = level.get_level_diagonal_extent();
+
+        let padding = 3.0;
+        let padded_diagonal = level_diagonal + padding;
+
+        // Calculate scale: padded diagonal should fit in viewport
+        let optimal_scale = padded_diagonal / viewport_size;
+
+        // Apply the new position and zoom
+        transform.translation = camera_pos;
+        if let Projection::Orthographic(ortho) = projection.as_mut() {
+            ortho.scale = optimal_scale;
+        }
+
+        info!(
+            "Camera positioned for level '{level_name}': position {camera_pos:?}, scale {scale:.4} (viewport: {viewport_width}x{viewport_height}, using {viewport_dim} {viewport_size}, yaw: {yaw:.1}°, diagonal: {diagonal:.2})",
+            level_name = level.name,
+            scale = optimal_scale,
+            viewport_dim = if is_portrait { "height" } else { "width" },
+            yaw = normalized_yaw,
+            diagonal = level_diagonal
+        );
+    }
+}
+
 
 /// Plugin for level geometry creation
 pub struct LevelPlugin;
@@ -457,6 +650,7 @@ impl Plugin for LevelPlugin {
                     level_cycling_input_system,
                     level_switching_system,
                     update_level_name_display,
+                    position_camera_for_level_system.after(crate::rendering::camera_rotation_animation_system),
                 ),
             );
 

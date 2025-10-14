@@ -1,22 +1,23 @@
-//! Level Geometry System
+//! Level System
 //!
-//! Shared level creation functionality for spawning hex-based level geometry
-//! in both the game and level editor applications.
+//! Core level data structures, management, and mesh generation for tactical RPG
+//! hex-based level geometry in both the game and level editor applications.
 
 use anyhow::{Context, Result};
-use bevy::pbr::wireframe::{Wireframe, WireframeConfig, WireframePlugin};
+use bevy::pbr::wireframe::{WireframeConfig, WireframePlugin};
 use bevy::prelude::*;
-use bevy::render::{
-    mesh::{Indices, PrimitiveTopology},
-    render_asset::RenderAssetUsages,
-};
-use hexx::{ColumnMeshBuilder, Hex, HexLayout};
+use hexx::{Hex, HexLayout};
 use ndarray::Array2;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use tracing::{info, warn};
 
 use crate::colors::*;
+use crate::level::management::level_switching_system;
+use crate::level::mesh::spawn_hex_grid;
+
+pub mod management;
+pub mod mesh;
 
 /// Represents a tactical level with hex grid layout and height data
 #[derive(Debug, Clone, Resource, Serialize, Deserialize)]
@@ -85,6 +86,10 @@ impl Level {
     }
 
     /// Calculate the world-space bounding box of this level's hex grid
+    ///
+    /// Returns (min_bounds, max_bounds) where:
+    /// - min_bounds: minimum X, Y, Z coordinates across all hexes
+    /// - max_bounds: maximum X, Y, Z coordinates across all hexes
     pub fn get_world_bounds(&self) -> (Vec3, Vec3) {
         let hex_layout = Self::hex_layout();
 
@@ -107,6 +112,11 @@ impl Level {
     }
 
     /// Get the center hex coordinates for this level (handles all dimension cases)
+    ///
+    /// Returns different numbers of hexes based on grid dimensions:
+    /// - Odd×Odd: 1 center hex
+    /// - Even×Even: 4 center hexes
+    /// - Even×Odd or Odd×Even: 2 center hexes
     pub fn get_center_hexes(&self) -> Vec<Hex> {
         match (self.width % 2, self.height % 2) {
             (1, 1) => {
@@ -300,88 +310,6 @@ pub fn load_levels_from_directory(levels_dir: &str) -> Result<LevelsResource> {
     })
 }
 
-/// Component to mark the level name display text
-#[derive(Component)]
-pub struct LevelNameDisplay;
-
-/// Component to mark hex grid entities for easy despawning during level changes
-#[derive(Component)]
-pub struct HexGridEntity;
-
-/// System to spawn the level name UI text in the bottom-right corner
-pub fn spawn_level_name_ui(mut commands: Commands, levels_resource: Res<LevelsResource>) {
-    let level = levels_resource.current_level();
-    info!(
-        "Spawning level name UI for level: '{level_name}'",
-        level_name = level.name
-    );
-
-    // Create UI text positioned in bottom-right corner of screen
-    let entity = commands
-        .spawn((
-            Text::new(&level.name),
-            TextFont {
-                font_size: 24.0,
-                ..default()
-            },
-            TextColor(Color::BLACK),
-            Node {
-                position_type: PositionType::Absolute,
-                bottom: Val::Px(20.0),
-                right: Val::Px(20.0),
-                ..default()
-            },
-            LevelNameDisplay,
-        ))
-        .id();
-
-    info!("Level name UI entity spawned: {entity:?} at bottom-right corner");
-}
-
-/// System to update the level name display when the levels resource changes
-pub fn update_level_name_display(
-    levels_resource: Res<LevelsResource>,
-    mut text_query: Query<&mut Text, With<LevelNameDisplay>>,
-) {
-    if levels_resource.is_changed() {
-        let level = levels_resource.current_level();
-        info!(
-            "Level changed, updating level name display to: '{level_name}'",
-            level_name = level.name
-        );
-        for mut text in text_query.iter_mut() {
-            **text = level.name.clone();
-        }
-    }
-}
-
-/// Create a hexagonal column mesh using hexx
-pub fn create_hex_column_mesh(layout: &HexLayout, height: f32) -> Mesh {
-    let mesh_info = ColumnMeshBuilder::new(layout, height)
-        .without_bottom_face()
-        .center_aligned()
-        .build();
-
-    Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::RENDER_WORLD,
-    )
-    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, mesh_info.vertices)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, mesh_info.normals)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, mesh_info.uvs)
-    .with_inserted_indices(Indices::U16(mesh_info.indices))
-}
-
-/// System to spawn hex grid based on the LevelsResource (used for initial spawn)
-pub fn spawn_hex_grid(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    levels_resource: Res<LevelsResource>,
-) {
-    spawn_hex_grid_internal(&mut commands, &mut meshes, &mut materials, &levels_resource);
-}
-
 /// System to handle left/right arrow key input for level cycling
 pub fn level_cycling_input_system(
     keyboard_input: Res<ButtonInput<KeyCode>>,
@@ -429,191 +357,6 @@ pub fn level_cycling_input_system(
     }
 }
 
-/// System to handle level switching by despawning old hex grid and spawning new one
-pub fn level_switching_system(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    levels_resource: Res<LevelsResource>,
-    hex_grid_query: Query<Entity, With<HexGridEntity>>,
-) {
-    // Only trigger when LevelsResource has actually changed
-    if !levels_resource.is_changed() {
-        return;
-    }
-
-    let level = levels_resource.current_level();
-    info!(
-        "Level switched: Despawning old hex grid and spawning new grid for '{level_name}'",
-        level_name = level.name
-    );
-
-    // Despawn all existing hex grid entities
-    let despawn_count = hex_grid_query.iter().count();
-    for entity in hex_grid_query.iter() {
-        commands.entity(entity).despawn();
-    }
-
-    if despawn_count > 0 {
-        info!(
-            "Despawned {count} hex grid entities from previous level",
-            count = despawn_count
-        );
-    }
-
-    // Spawn new hex grid for the current level using existing logic
-    spawn_hex_grid_internal(&mut commands, &mut meshes, &mut materials, &levels_resource);
-}
-
-/// Internal function to spawn hex grid (extracted from spawn_hex_grid for reuse)
-fn spawn_hex_grid_internal(
-    commands: &mut Commands,
-    meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<StandardMaterial>>,
-    levels_resource: &Res<LevelsResource>,
-) {
-    let level = levels_resource.current_level();
-    info!(
-        "Spawning hex grid for level '{level_name}' ({width}x{height})",
-        level_name = level.name,
-        width = level.width,
-        height = level.height
-    );
-
-    // Use centralized hex layout configuration for consistency
-    let hex_layout = Level::hex_layout();
-
-    // Create tactical gray material for hex surfaces
-    let hex_material = materials.add(StandardMaterial {
-        base_color: HEX_SURFACE_GRAY,
-        metallic: 0.1,
-        perceptual_roughness: 0.8,
-        reflectance: 0.2,
-        ..default()
-    });
-
-    // Generate hex grid from Level data
-    let hex_grid = level.get_hex_grid();
-    info!(
-        "Generated {count} hex coordinates for the grid",
-        count = hex_grid.len()
-    );
-
-    for hex in hex_grid {
-        let height = level.get_height(hex);
-        let hex_mesh = create_hex_column_mesh(&hex_layout, height);
-        let world_pos = hex_layout.hex_to_world_pos(hex);
-
-        // Spawn hex column with both solid surface and wireframe edges
-        commands.spawn((
-            Mesh3d(meshes.add(hex_mesh)),
-            MeshMaterial3d(hex_material.clone()),
-            Transform::from_xyz(world_pos.x, height / 2.0, world_pos.y),
-            Wireframe,     // Add wireframe component for green edges
-            HexGridEntity, // Mark as hex grid entity for level cycling
-        ));
-    }
-
-    info!("Hex grid spawning completed");
-}
-
-/// System to automatically position and zoom camera for optimal level viewing when level changes
-pub fn position_camera_for_level_system(
-    levels_resource: Res<LevelsResource>,
-    mut camera_query: Query<
-        (&mut Transform, &mut Projection),
-        With<crate::rendering::TacticalCamera>,
-    >,
-    windows: Query<&Window>,
-) {
-    // Only trigger when LevelsResource has actually changed
-    if !levels_resource.is_changed() {
-        return;
-    }
-
-    if let Ok((mut transform, mut projection)) = camera_query.single_mut() {
-        let level = levels_resource.current_level();
-
-        // Get center world position (handles all dimension cases)
-        let center_pos = level.get_center_world_pos();
-
-        // Calculate camera height as center position height + 20 units
-        let camera_height = center_pos.y + 20.0;
-
-        // Use camera's actual forward vector for inverse raycast
-        let camera_forward = transform.forward();
-
-        // Inverse raycast: center_pos = camera_pos + t * camera_forward
-        // Solve for t: we want ray to hit the center position
-        let height_diff = camera_height - center_pos.y;
-        let t = height_diff / (-camera_forward.y); // Negative because forward points down
-
-        // Calculate camera XZ position using inverse raycast
-        let camera_x = center_pos.x - t * camera_forward.x;
-        let camera_z = center_pos.z - t * camera_forward.z;
-        let camera_pos = Vec3::new(camera_x, camera_height, camera_z);
-
-        // Viewport-aware scale calculation using level diagonal extent
-        let window = match windows.iter().next() {
-            Some(window) => window,
-            None => {
-                warn!("No window available for camera positioning");
-                return; // No window available, skip camera positioning
-            }
-        };
-        let viewport_width = window.width();
-        let viewport_height = window.height();
-
-        // Determine viewport dimension based on camera Y rotation
-        // Extract Y rotation from camera transform
-        let (yaw, _, _) = transform.rotation.to_euler(bevy::math::EulerRot::YXZ);
-        let yaw_degrees = yaw.to_degrees();
-
-        // Normalize angle to 0-360 range for easier comparison
-        let normalized_yaw = if yaw_degrees < 0.0 {
-            yaw_degrees + 360.0
-        } else {
-            yaw_degrees
-        };
-
-        // Check if camera is rotated to portrait orientation (±90° from default)
-        // Default starts at -45° (315°), so portrait orientations are around 45° and 225°
-        let is_portrait = (normalized_yaw >= 35.0 && normalized_yaw <= 55.0) ||
-                         (normalized_yaw >= 215.0 && normalized_yaw <= 235.0);
-
-        let viewport_size = if is_portrait {
-            window.height()
-        } else {
-            window.width()
-        };
-
-        // Get diagonal extent of level in world units
-        let level_diagonal = level.get_level_diagonal_extent();
-
-        let padding = 3.0;
-        let padded_diagonal = level_diagonal + padding;
-
-        // Calculate scale: padded diagonal should fit in viewport
-        let optimal_scale = padded_diagonal / viewport_size;
-
-        // Apply the new position and zoom
-        transform.translation = camera_pos;
-        if let Projection::Orthographic(ortho) = projection.as_mut() {
-            ortho.scale = optimal_scale;
-        }
-
-        info!(
-            "Camera positioned for level '{level_name}': position {camera_pos:?}, scale {scale:.4} (viewport: {viewport_width}x{viewport_height}, using {viewport_dim} {viewport_size}, yaw: {yaw:.1}°, diagonal: {diagonal:.2})",
-            level_name = level.name,
-            scale = optimal_scale,
-            viewport_dim = if is_portrait { "height" } else { "width" },
-            yaw = normalized_yaw,
-            diagonal = level_diagonal
-        );
-    }
-}
-
-
 /// Plugin for level geometry creation
 pub struct LevelPlugin;
 
@@ -643,16 +386,8 @@ impl Plugin for LevelPlugin {
                 default_color: HEX_EDGE_GREEN,
             })
             .insert_resource(levels_resource)
-            .add_systems(Startup, (spawn_hex_grid, spawn_level_name_ui))
-            .add_systems(
-                Update,
-                (
-                    level_cycling_input_system,
-                    level_switching_system,
-                    update_level_name_display,
-                    position_camera_for_level_system.after(crate::rendering::camera_rotation_animation_system),
-                ),
-            );
+            .add_systems(Startup, spawn_hex_grid)
+            .add_systems(Update, (level_cycling_input_system, level_switching_system));
 
         info!("LevelPlugin: Plugin setup completed");
     }

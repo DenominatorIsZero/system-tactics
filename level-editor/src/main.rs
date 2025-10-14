@@ -5,7 +5,8 @@
 
 use bevy::asset::AssetPlugin;
 use bevy::prelude::*;
-use shared::{LevelPlugin, RenderingPlugin};
+use shared::level::LevelPlugin;
+use shared::rendering::RenderingPlugin;
 use tracing::info;
 
 fn main() {

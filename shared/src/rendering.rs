@@ -1,19 +1,23 @@
-//! Rendering Setup Systems
+//! Rendering System
 //!
-//! Shared camera and lighting setup for tactical RPG view in both game
-//! and level editor applications.
+//! Camera controls, lighting setup, and UI rendering for tactical RPG view
+//! in both game and level editor applications.
 
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 use tracing::{debug, info};
 
+use crate::rendering::camera::position_camera_for_level_system;
+use crate::rendering::ui::{
+    spawn_fps_counter, spawn_level_name_ui, update_fps_display, update_level_name_display,
+};
+
+pub mod camera;
+pub mod ui;
+
 /// Component to mark the tactical camera for movement controls
 #[derive(Component)]
 pub struct TacticalCamera;
-
-/// Component to mark the FPS counter display text
-#[derive(Component)]
-pub struct FpsDisplay;
 
 /// Resource to track camera rotation state for smooth animations
 #[derive(Resource, Default)]
@@ -41,7 +45,7 @@ pub enum RotationMode {
 /// TODO (Task 8): Replace with proper hex raycasting when level data structure is
 /// implemented. Should raycast against hex column bounds and return intersection
 /// with the actual hex surface the camera is looking at.
-fn calculate_camera_focus_point(transform: &Transform) -> Vec3 {
+pub fn calculate_camera_focus_point(transform: &Transform) -> Vec3 {
     let camera_pos = transform.translation;
     let forward_dir = transform.forward();
 
@@ -267,47 +271,6 @@ pub fn camera_rotation_animation_system(
     }
 }
 
-/// System to spawn the FPS counter in the top-left corner
-pub fn spawn_fps_counter(mut commands: Commands) {
-    info!("Spawning FPS counter UI");
-
-    let entity = commands
-        .spawn((
-            Text::new("FPS: --"),
-            TextFont {
-                font_size: 20.0,
-                ..default()
-            },
-            TextColor(crate::colors::YELLOW_ACCENT),
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(20.0),
-                left: Val::Px(20.0),
-                ..default()
-            },
-            FpsDisplay,
-        ))
-        .id();
-
-    info!("FPS counter UI entity spawned: {entity:?} at top-left corner");
-}
-
-/// System to update the FPS counter display
-pub fn update_fps_display(
-    diagnostics: Res<bevy::diagnostic::DiagnosticsStore>,
-    mut text_query: Query<&mut Text, With<FpsDisplay>>,
-) {
-    for mut text in text_query.iter_mut() {
-        if let Some(fps_diagnostic) =
-            diagnostics.get(&bevy::diagnostic::FrameTimeDiagnosticsPlugin::FPS)
-        {
-            if let Some(fps_smoothed) = fps_diagnostic.smoothed() {
-                **text = format!("FPS: {fps_smoothed:.1}");
-            }
-        }
-    }
-}
-
 /// System to log current camera position and settings when 'C' key is pressed
 pub fn debug_camera_logging_system(
     keyboard_input: Res<ButtonInput<KeyCode>>,
@@ -356,7 +319,15 @@ impl Plugin for RenderingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CameraRotationState>()
             .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
-            .add_systems(Startup, (setup_camera, setup_lighting, spawn_fps_counter))
+            .add_systems(
+                Startup,
+                (
+                    setup_camera,
+                    setup_lighting,
+                    spawn_fps_counter,
+                    spawn_level_name_ui,
+                ),
+            )
             .add_systems(
                 Update,
                 (
@@ -366,6 +337,8 @@ impl Plugin for RenderingPlugin {
                     camera_rotation_animation_system,
                     update_fps_display,
                     debug_camera_logging_system,
+                    update_level_name_display,
+                    position_camera_for_level_system.after(camera_rotation_animation_system),
                 ),
             );
     }

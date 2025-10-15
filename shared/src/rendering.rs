@@ -6,14 +6,16 @@
 use bevy::prelude::*;
 use tracing::debug;
 
-use crate::rendering::camera::{setup_camera, camera_rotation_animation_system, cache_level_diagonal_system, position_camera_for_level_system, update_camera_limits_system, CameraLimits, CameraRotationState};
+use crate::rendering::camera::{
+    CameraLimits, CameraRotationState, camera_rotation_animation_system, on_level_change_system,
+    on_rotation_complete_system, on_window_resize_system, on_zoom_change_system, setup_camera,
+};
 use crate::rendering::ui::{
     spawn_fps_counter, spawn_level_name_ui, update_fps_display, update_level_name_display,
 };
 
 pub mod camera;
 pub mod ui;
-
 
 /// System to setup tactical lighting
 pub fn setup_lighting(mut commands: Commands) {
@@ -48,7 +50,6 @@ pub fn setup_lighting(mut commands: Commands) {
     });
 }
 
-
 /// Plugin for rendering setup (lighting and UI)
 pub struct RenderingPlugin;
 
@@ -70,14 +71,12 @@ impl Plugin for RenderingPlugin {
                 Update,
                 (
                     camera_rotation_animation_system,
-                    cache_level_diagonal_system,
-                    update_camera_limits_system
-                        .after(cache_level_diagonal_system)
-                        .after(camera_rotation_animation_system),
+                    on_level_change_system,
+                    on_zoom_change_system,
+                    on_rotation_complete_system,
+                    on_window_resize_system,
                     update_fps_display,
                     update_level_name_display,
-                    position_camera_for_level_system
-                        .after(update_camera_limits_system),
                 ),
             );
     }

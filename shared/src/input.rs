@@ -3,13 +3,15 @@
 //! Input handling for camera controls, level cycling, and debug commands
 //! for the tactical RPG.
 
-use bevy::input::mouse::{MouseButtonInput, MouseMotion, MouseWheel};
 use bevy::input::ButtonState;
+use bevy::input::mouse::{MouseButtonInput, MouseMotion, MouseWheel};
 use bevy::prelude::*;
 use tracing::info;
 
 use crate::level::LevelsResource;
-use crate::rendering::camera::{calculate_camera_focus_point, CameraLimits, CameraRotationState, RotationMode, TacticalCamera};
+use crate::rendering::camera::{
+    CameraLimits, CameraRotationState, RotationMode, TacticalCamera, calculate_camera_focus_point,
+};
 
 /// System to handle left/right arrow key input for level cycling
 pub fn level_cycling_input_system(
@@ -79,23 +81,29 @@ pub fn camera_movement_system(
         let forward = Vec3::new(transform.forward().x, 0.0, transform.forward().z).normalize();
         let right = transform.right();
 
+        // Calculate proposed new position based on input
+        let mut proposed_position = transform.translation;
+
         // Movement aligned with camera view but parallel to ground
         if keyboard_input.pressed(KeyCode::KeyW) {
             // Move forward relative to camera (but only in XZ plane)
-            transform.translation += forward * movement_speed * delta_time;
+            proposed_position += forward * movement_speed * delta_time;
         }
         if keyboard_input.pressed(KeyCode::KeyS) {
             // Move backward relative to camera (but only in XZ plane)
-            transform.translation -= forward * movement_speed * delta_time;
+            proposed_position -= forward * movement_speed * delta_time;
         }
         if keyboard_input.pressed(KeyCode::KeyA) {
             // Move left relative to camera
-            transform.translation -= right * movement_speed * delta_time;
+            proposed_position -= right * movement_speed * delta_time;
         }
         if keyboard_input.pressed(KeyCode::KeyD) {
             // Move right relative to camera
-            transform.translation += right * movement_speed * delta_time;
+            proposed_position += right * movement_speed * delta_time;
         }
+
+        // Apply the proposed position (clamping will be handled by dedicated system)
+        transform.translation = proposed_position;
     }
 }
 
@@ -224,16 +232,49 @@ pub fn camera_mouse_pan_system(
 
                 // Convert mouse delta to world-space movement relative to camera orientation
                 // Similar to WASD movement but based on mouse motion
-                let forward = Vec3::new(transform.forward().x, 0.0, transform.forward().z).normalize();
+                let forward =
+                    Vec3::new(transform.forward().x, 0.0, transform.forward().z).normalize();
                 let right = transform.right();
 
-                // Apply movement in camera-relative coordinates
-                // Invert Y to match typical mouse panning expectations
+                // Calculate proposed movement
                 let movement = right * (-event.delta.x * pan_sensitivity)
-                             + forward * (event.delta.y * pan_sensitivity);
+                    + forward * (event.delta.y * pan_sensitivity);
 
-                transform.translation += movement;
+                let proposed_position = transform.translation + movement;
+
+                // Apply the proposed position (clamping will be handled by dedicated system)
+                transform.translation = proposed_position;
             }
+        }
+    }
+}
+
+/// System to clamp camera position to movement bounds
+pub fn clamp_camera_position_system(
+    camera_limits: Res<CameraLimits>,
+    mut camera_query: Query<&mut Transform, With<TacticalCamera>>,
+) {
+    if let Ok(mut transform) = camera_query.single_mut() {
+        let current_movement_radius = camera_limits.current_movement_radius;
+
+        let optimal_x = camera_limits.optimal_camera_position.x;
+        let optimal_z = camera_limits.optimal_camera_position.z;
+
+        if current_movement_radius > 0.0 {
+            // Clamp X and Z coordinates to optimal position +- radius
+            // Y coordinate is not clamped (camera height stays the same)
+            transform.translation.x = transform.translation.x.clamp(
+                optimal_x - current_movement_radius,
+                optimal_x + current_movement_radius,
+            );
+            transform.translation.z = transform.translation.z.clamp(
+                optimal_z - current_movement_radius,
+                optimal_z + current_movement_radius,
+            );
+        } else {
+            // When radius is 0, force camera to stay exactly at optimal position
+            transform.translation.x = optimal_x;
+            transform.translation.z = optimal_z;
         }
     }
 }
@@ -243,17 +284,19 @@ pub struct InputPlugin;
 
 impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<MousePanState>()
-            .add_systems(
-                Update,
-                (
-                    level_cycling_input_system,
-                    camera_movement_system,
-                    camera_zoom_system,
-                    camera_rotation_input_system,
-                    camera_mouse_pan_system,
-                    debug_camera_logging_system,
-                ),
-            );
+        app.init_resource::<MousePanState>().add_systems(
+            Update,
+            (
+                level_cycling_input_system,
+                camera_movement_system,
+                camera_zoom_system,
+                camera_rotation_input_system,
+                camera_mouse_pan_system,
+                debug_camera_logging_system,
+                clamp_camera_position_system
+                    .after(camera_movement_system)
+                    .after(camera_mouse_pan_system),
+            ),
+        );
     }
 }

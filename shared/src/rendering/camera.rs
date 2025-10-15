@@ -28,22 +28,28 @@ pub enum RotationMode {
     CounterClockwise(f32), // f32 = remaining rotation in radians
 }
 
-/// Resource to track dynamic camera zoom limits
+/// Resource to track dynamic camera zoom limits and movement bounds
 #[derive(Resource)]
 pub struct CameraLimits {
-    pub min_zoom_scale: f32,      // Closest zoom - explicit constant
-    pub max_zoom_scale: f32,      // Furthest zoom - calculated optimal scale
-    pub level_diagonal: f32,      // Cached diagonal extent from current level
+    pub min_zoom_scale: f32, // Closest zoom (smallest scale value) - explicit constant
+    pub max_zoom_scale: f32, // Furthest zoom (largest scale value) - calculated optimal scale
+    pub level_diagonal: f32, // Cached diagonal extent from current level
     pub needs_recalculation: bool, // Flag to trigger limits recalculation
+    pub optimal_camera_position: Vec3, // Optimal camera position for current level
+    pub current_movement_radius: f32, // Current movement distance based on current zoom level
+    pub rotation_processed: bool, // Flag to track if current rotation completion was processed
 }
 
 impl Default for CameraLimits {
     fn default() -> Self {
         Self {
-            min_zoom_scale: 0.005,    // Same as current hardcoded minimum
-            max_zoom_scale: 0.05,     // Temporary default, will be calculated
-            level_diagonal: 10.0,     // Default level size
+            min_zoom_scale: 0.005,     // Same as current hardcoded minimum
+            max_zoom_scale: 0.05,      // Temporary default, will be calculated
+            level_diagonal: 10.0,      // Default level size
             needs_recalculation: true, // Initially needs calculation
+            optimal_camera_position: Vec3::new(4.5, 20.0, -4.5), // Default camera position
+            current_movement_radius: 5.0, // Default movement radius
+            rotation_processed: false, // Initially no rotation to process
         }
     }
 }
@@ -98,6 +104,70 @@ pub fn orbit_camera_around_point(transform: &mut Transform, pivot: Vec3, y_rotat
     transform.rotation = rotation_quat * transform.rotation;
 }
 
+/// Calculate movement radius based on current zoom level
+/// Returns level_diagonal/2 at closest zoom (min_zoom_scale), 0 at furthest zoom (max_zoom_scale)
+pub fn calculate_movement_radius(camera_limits: &CameraLimits, current_scale: f32) -> f32 {
+    // Clamp current scale to valid zoom range
+    // min_zoom_scale = smallest scale value = closest zoom
+    // max_zoom_scale = largest scale value = furthest zoom
+    let clamped_scale =
+        current_scale.clamp(camera_limits.min_zoom_scale, camera_limits.max_zoom_scale);
+
+    // Linear interpolation: level_diagonal/2 at min_zoom_scale (closest), 0 at max_zoom_scale (furthest)
+    let zoom_factor = (camera_limits.max_zoom_scale - clamped_scale)
+        / (camera_limits.max_zoom_scale - camera_limits.min_zoom_scale);
+
+    zoom_factor * (camera_limits.level_diagonal / 2.0)
+}
+
+/// Calculate optimal camera scale based on level diagonal, viewport size and camera orientation
+pub fn calculate_optimal_scale(level_diagonal: f32, viewport_size: f32) -> f32 {
+    let padding = 3.0;
+    let padded_diagonal = level_diagonal + padding;
+    padded_diagonal / viewport_size
+}
+
+/// Calculate optimal camera position for a level center using inverse raycast
+pub fn calculate_optimal_camera_position(center_pos: Vec3, camera_forward: Dir3) -> Vec3 {
+    // Calculate camera height as center position height + 20 units
+    let camera_height = center_pos.y + 20.0;
+
+    // Inverse raycast: center_pos = camera_pos + t * camera_forward
+    // Solve for t: we want ray to hit the center position
+    let height_diff = camera_height - center_pos.y;
+    let t = height_diff / (-camera_forward.y); // Negative because forward points down
+
+    // Calculate camera XZ position using inverse raycast
+    let camera_x = center_pos.x - t * camera_forward.x;
+    let camera_z = center_pos.z - t * camera_forward.z;
+    Vec3::new(camera_x, camera_height, camera_z)
+}
+
+/// Determine viewport size based on camera orientation and window dimensions
+pub fn get_viewport_size_for_orientation(transform: &Transform, window: &Window) -> f32 {
+    // Determine viewport dimension based on camera Y rotation
+    let (yaw, _, _) = transform.rotation.to_euler(bevy::math::EulerRot::YXZ);
+    let yaw_degrees = yaw.to_degrees();
+
+    // Normalize angle to 0-360 range for easier comparison
+    let normalized_yaw = if yaw_degrees < 0.0 {
+        yaw_degrees + 360.0
+    } else {
+        yaw_degrees
+    };
+
+    // Check if camera is rotated to portrait orientation (±90° from default)
+    // Default starts at -45° (315°), so portrait orientations are around 45° and 225°
+    let is_portrait =
+        (35.0..=55.0).contains(&normalized_yaw) || (215.0..=235.0).contains(&normalized_yaw);
+
+    if is_portrait {
+        window.height()
+    } else {
+        window.width()
+    }
+}
+
 /// System to setup tactical camera
 pub fn setup_camera(mut commands: Commands) {
     let camera_pos = Vec3::new(4.5, 20.0, -4.5); // Above grid center
@@ -105,9 +175,7 @@ pub fn setup_camera(mut commands: Commands) {
     let rotation = Quat::from_rotation_y(-45.0_f32.to_radians())
         * Quat::from_rotation_x(-45.0_f32.to_radians());
 
-    debug!(
-        "Spawning isometric camera at position {camera_pos} with rotation {rotation:?}"
-    );
+    debug!("Spawning isometric camera at position {camera_pos} with rotation {rotation:?}");
 
     commands.spawn((
         Camera3d::default(),
@@ -142,10 +210,10 @@ pub fn camera_rotation_animation_system(
 
                 *remaining -= this_frame_rotation;
 
-                // If rotation is complete, snap to stable state and trigger limits recalculation
+                // If rotation is complete, snap to stable state and mark for processing
                 if *remaining <= 0.0 {
                     rotation_state.rotation_mode = RotationMode::Stable;
-                    camera_limits.needs_recalculation = true;
+                    camera_limits.rotation_processed = false; // Mark as needing processing
                 }
             }
             RotationMode::CounterClockwise(remaining) => {
@@ -158,10 +226,10 @@ pub fn camera_rotation_animation_system(
 
                 *remaining -= this_frame_rotation;
 
-                // If rotation is complete, snap to stable state and trigger limits recalculation
+                // If rotation is complete, snap to stable state and mark for processing
                 if *remaining <= 0.0 {
                     rotation_state.rotation_mode = RotationMode::Stable;
-                    camera_limits.needs_recalculation = true;
+                    camera_limits.rotation_processed = false; // Mark as needing processing
                 }
             }
             RotationMode::Stable => {
@@ -171,133 +239,181 @@ pub fn camera_rotation_animation_system(
     }
 }
 
-/// System to update camera zoom limits based on level size, camera orientation, and window size
-pub fn update_camera_limits_system(
-    mut window_resize_events: EventReader<WindowResized>,
+/// System that handles all camera updates when level changes
+/// Calculates diagonal, optimal position, updates limits, sets position + zoom, and movement radius
+pub fn on_level_change_system(
+    levels_resource: Res<LevelsResource>,
     mut camera_limits: ResMut<CameraLimits>,
-    camera_query: Query<&Transform, With<TacticalCamera>>,
+    mut camera_query: Query<(&mut Transform, &mut Projection), With<TacticalCamera>>,
     windows: Query<&Window>,
 ) {
-    let window_resized = window_resize_events.read().count() > 0;
-
-    // Only recalculate if window was resized or flag is set
-    if !window_resized && !camera_limits.needs_recalculation {
+    // Only trigger when LevelsResource has actually changed
+    if !levels_resource.is_changed() {
         return;
     }
-    let Ok(transform) = camera_query.single() else {
+
+    let Ok((mut transform, mut projection)) = camera_query.single_mut() else {
         return;
     };
 
     let Some(window) = windows.iter().next() else {
-        warn!("No window available for camera limits calculation");
+        warn!("No window available for level change camera update");
         return;
     };
-
-    // Determine viewport dimension based on camera Y rotation
-    let (yaw, _, _) = transform.rotation.to_euler(bevy::math::EulerRot::YXZ);
-    let yaw_degrees = yaw.to_degrees();
-
-    // Normalize angle to 0-360 range for easier comparison
-    let normalized_yaw = if yaw_degrees < 0.0 {
-        yaw_degrees + 360.0
-    } else {
-        yaw_degrees
-    };
-
-    // Check if camera is rotated to portrait orientation (±90° from default)
-    // Default starts at -45° (315°), so portrait orientations are around 45° and 225°
-    let is_portrait =
-        (35.0..=55.0).contains(&normalized_yaw) || (215.0..=235.0).contains(&normalized_yaw);
-
-    let viewport_size = if is_portrait {
-        window.height()
-    } else {
-        window.width()
-    };
-
-    // Calculate optimal scale using cached level diagonal
-    let padding = 3.0;
-    let padded_diagonal = camera_limits.level_diagonal + padding;
-    let optimal_scale = padded_diagonal / viewport_size;
-
-    // Update max zoom limit and clear recalculation flag
-    camera_limits.max_zoom_scale = optimal_scale;
-    camera_limits.needs_recalculation = false;
-
-    debug!(
-        "Updated camera limits: max_scale={scale:.4} (diagonal={diagonal:.2}, viewport={viewport_size}, portrait={is_portrait})",
-        scale = optimal_scale,
-        diagonal = camera_limits.level_diagonal
-    );
-}
-
-/// System to cache level diagonal when level changes
-pub fn cache_level_diagonal_system(
-    levels_resource: Res<LevelsResource>,
-    mut camera_limits: ResMut<CameraLimits>,
-) {
-    // Only trigger when LevelsResource has actually changed
-    if !levels_resource.is_changed() {
-        return;
-    }
 
     let level = levels_resource.current_level();
 
-    // Cache level diagonal in camera limits and trigger limits recalculation
-    camera_limits.level_diagonal = level.get_level_diagonal_extent();
-    camera_limits.needs_recalculation = true;
+    // 1. Calculate and cache level diagonal
+    let level_diagonal = level.get_level_diagonal_extent();
+    camera_limits.level_diagonal = level_diagonal;
 
-    debug!(
-        "Cached level diagonal for '{level_name}': {diagonal:.2}",
+    // 2. Calculate and cache optimal camera position
+    let center_pos = level.get_center_world_pos();
+    let camera_forward = transform.forward();
+    let optimal_position = calculate_optimal_camera_position(center_pos, camera_forward);
+    camera_limits.optimal_camera_position = optimal_position;
+
+    // 3. Update camera limits (max zoom scale) based on new level and current orientation
+    let viewport_size = get_viewport_size_for_orientation(&transform, window);
+    let optimal_scale = calculate_optimal_scale(level_diagonal, viewport_size);
+    camera_limits.max_zoom_scale = optimal_scale;
+
+    // 4. Set optimal position and zoom
+    transform.translation = optimal_position;
+    if let Projection::Orthographic(ortho) = projection.as_mut() {
+        ortho.scale = optimal_scale;
+    }
+
+    // 5. Update movement radius based on new zoom level
+    if let Projection::Orthographic(ortho) = projection.as_ref() {
+        camera_limits.current_movement_radius =
+            calculate_movement_radius(&camera_limits, ortho.scale);
+    }
+
+    camera_limits.needs_recalculation = false;
+
+    info!(
+        "Level change: Updated camera for '{level_name}' - position: {position:?}, scale: {scale:.4}, diagonal: {diagonal:.2}, movement_radius: {radius:.2}",
         level_name = level.name,
-        diagonal = camera_limits.level_diagonal
+        position = optimal_position,
+        scale = optimal_scale,
+        diagonal = level_diagonal,
+        radius = camera_limits.current_movement_radius
     );
 }
 
-/// System to automatically position and zoom camera for optimal level viewing when level changes
-pub fn position_camera_for_level_system(
-    levels_resource: Res<LevelsResource>,
-    camera_limits: Res<CameraLimits>,
-    mut camera_query: Query<(&mut Transform, &mut Projection), With<TacticalCamera>>,
+/// System that updates movement radius when camera zoom changes
+pub fn on_zoom_change_system(
+    mut camera_limits: ResMut<CameraLimits>,
+    camera_query: Query<&Projection, (With<TacticalCamera>, Changed<Projection>)>,
 ) {
-    // Only trigger when LevelsResource has actually changed
-    if !levels_resource.is_changed() {
+    // Only trigger when camera projection has changed (zoom)
+    if let Ok(Projection::Orthographic(ortho)) = camera_query.single() {
+        let new_movement_radius = calculate_movement_radius(&camera_limits, ortho.scale);
+
+        // Only update if the value has actually changed to avoid unnecessary work
+        if (new_movement_radius - camera_limits.current_movement_radius).abs() > 0.001 {
+            camera_limits.current_movement_radius = new_movement_radius;
+
+            debug!(
+                "Zoom change: Updated movement radius to {radius:.3} (scale={scale:.4})",
+                radius = new_movement_radius,
+                scale = ortho.scale
+            );
+        }
+    }
+}
+
+/// System that updates zoom limits and movement radius when rotation completes
+/// Only runs when CameraRotationState has changed AND rotation_mode is Stable AND not yet processed
+pub fn on_rotation_complete_system(
+    rotation_state: Res<CameraRotationState>,
+    levels_resource: Res<LevelsResource>,
+    mut camera_limits: ResMut<CameraLimits>,
+    camera_query: Query<(&Transform, &Projection), With<TacticalCamera>>,
+    windows: Query<&Window>,
+) {
+    // Only update when rotation has completed (now stable) and not yet processed
+    if !matches!(rotation_state.rotation_mode, RotationMode::Stable) {
         return;
     }
 
-    if let Ok((mut transform, mut projection)) = camera_query.single_mut() {
-        let level = levels_resource.current_level();
-
-        // Get center world position (handles all dimension cases)
-        let center_pos = level.get_center_world_pos();
-
-        // Calculate camera height as center position height + 20 units
-        let camera_height = center_pos.y + 20.0;
-
-        // Use camera's actual forward vector for inverse raycast
-        let camera_forward = transform.forward();
-
-        // Inverse raycast: center_pos = camera_pos + t * camera_forward
-        // Solve for t: we want ray to hit the center position
-        let height_diff = camera_height - center_pos.y;
-        let t = height_diff / (-camera_forward.y); // Negative because forward points down
-
-        // Calculate camera XZ position using inverse raycast
-        let camera_x = center_pos.x - t * camera_forward.x;
-        let camera_z = center_pos.z - t * camera_forward.z;
-        let camera_pos = Vec3::new(camera_x, camera_height, camera_z);
-
-        // Apply the new position and use limits-calculated optimal scale
-        transform.translation = camera_pos;
-        if let Projection::Orthographic(ortho) = projection.as_mut() {
-            ortho.scale = camera_limits.max_zoom_scale;
-        }
-
-        info!(
-            "Camera positioned for level '{level_name}': position {camera_pos:?}, scale {scale:.4} (diagonal: {diagonal:.2})",
-            level_name = level.name,
-            scale = camera_limits.max_zoom_scale,
-            diagonal = camera_limits.level_diagonal
-        );
+    // Don't process if already processed
+    if camera_limits.rotation_processed {
+        return;
     }
+
+    let Ok((transform, projection)) = camera_query.single() else {
+        return;
+    };
+
+    let Some(window) = windows.iter().next() else {
+        warn!("No window available for rotation complete camera update");
+        return;
+    };
+
+    // Recalculate optimal camera position because camera forward vector changed
+    let level = levels_resource.current_level();
+    let center_pos = level.get_center_world_pos();
+    let updated_position = calculate_optimal_camera_position(center_pos, transform.forward());
+    camera_limits.optimal_camera_position = updated_position;
+
+    // Update zoom limits because viewport orientation changed
+    let viewport_size = get_viewport_size_for_orientation(transform, window);
+    let optimal_scale = calculate_optimal_scale(camera_limits.level_diagonal, viewport_size);
+    camera_limits.max_zoom_scale = optimal_scale;
+
+    // Update movement radius because limits changed
+    if let Projection::Orthographic(ortho) = projection {
+        camera_limits.current_movement_radius =
+            calculate_movement_radius(&camera_limits, ortho.scale);
+    }
+
+    camera_limits.rotation_processed = true; // Mark as processed
+
+    info!(
+        "Rotation complete: Updated camera - position: {position:?}, max_scale: {scale:.4}, movement_radius: {radius:.2}",
+        position = updated_position,
+        scale = optimal_scale,
+        radius = camera_limits.current_movement_radius
+    );
+}
+
+/// System to handle window resize events by updating camera limits
+pub fn on_window_resize_system(
+    mut window_resize_events: EventReader<WindowResized>,
+    mut camera_limits: ResMut<CameraLimits>,
+    camera_query: Query<(&Transform, &Projection), With<TacticalCamera>>,
+    windows: Query<&Window>,
+) {
+    // Only trigger when window was actually resized
+    if window_resize_events.read().count() == 0 {
+        return;
+    }
+
+    let Ok((transform, projection)) = camera_query.single() else {
+        return;
+    };
+
+    let Some(window) = windows.iter().next() else {
+        warn!("No window available for resize camera update");
+        return;
+    };
+
+    // Update camera limits based on new window size
+    let viewport_size = get_viewport_size_for_orientation(transform, window);
+    let optimal_scale = calculate_optimal_scale(camera_limits.level_diagonal, viewport_size);
+    camera_limits.max_zoom_scale = optimal_scale;
+
+    // Update movement radius because limits changed
+    if let Projection::Orthographic(ortho) = projection {
+        camera_limits.current_movement_radius =
+            calculate_movement_radius(&camera_limits, ortho.scale);
+    }
+
+    info!(
+        "Window resize: Updated camera limits - max_scale: {scale:.4}, movement_radius: {radius:.2}",
+        scale = optimal_scale,
+        radius = camera_limits.current_movement_radius
+    );
 }

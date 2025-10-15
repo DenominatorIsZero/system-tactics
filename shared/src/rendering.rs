@@ -6,7 +6,7 @@
 use bevy::prelude::*;
 use tracing::debug;
 
-use crate::rendering::camera::{setup_camera, camera_rotation_animation_system, position_camera_for_level_system, CameraRotationState};
+use crate::rendering::camera::{setup_camera, camera_rotation_animation_system, cache_level_diagonal_system, position_camera_for_level_system, update_camera_limits_system, CameraLimits, CameraRotationState};
 use crate::rendering::ui::{
     spawn_fps_counter, spawn_level_name_ui, update_fps_display, update_level_name_display,
 };
@@ -55,6 +55,7 @@ pub struct RenderingPlugin;
 impl Plugin for RenderingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CameraRotationState>()
+            .init_resource::<CameraLimits>()
             .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
             .add_systems(
                 Startup,
@@ -69,9 +70,14 @@ impl Plugin for RenderingPlugin {
                 Update,
                 (
                     camera_rotation_animation_system,
+                    cache_level_diagonal_system,
+                    update_camera_limits_system
+                        .after(cache_level_diagonal_system)
+                        .after(camera_rotation_animation_system),
                     update_fps_display,
                     update_level_name_display,
-                    position_camera_for_level_system.after(camera_rotation_animation_system),
+                    position_camera_for_level_system
+                        .after(update_camera_limits_system),
                 ),
             );
     }

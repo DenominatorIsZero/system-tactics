@@ -9,7 +9,7 @@ use bevy::prelude::*;
 use tracing::info;
 
 use crate::level::LevelsResource;
-use crate::rendering::camera::{calculate_camera_focus_point, CameraRotationState, RotationMode, TacticalCamera};
+use crate::rendering::camera::{calculate_camera_focus_point, CameraLimits, CameraRotationState, RotationMode, TacticalCamera};
 
 /// System to handle left/right arrow key input for level cycling
 pub fn level_cycling_input_system(
@@ -102,6 +102,7 @@ pub fn camera_movement_system(
 /// System for mouse wheel and trackpad zoom
 pub fn camera_zoom_system(
     mut mouse_wheel_events: EventReader<MouseWheel>,
+    camera_limits: Res<CameraLimits>,
     mut camera_query: Query<&mut Projection, With<TacticalCamera>>,
 ) {
     if let Ok(mut projection) = camera_query.single_mut() {
@@ -110,7 +111,8 @@ pub fn camera_zoom_system(
 
             // Adjust orthographic scale for zoom (smaller scale = more zoomed in)
             if let Projection::Orthographic(ortho) = projection.as_mut() {
-                ortho.scale = (ortho.scale - event.y * zoom_speed).clamp(0.005, 0.05);
+                ortho.scale = (ortho.scale - event.y * zoom_speed)
+                    .clamp(camera_limits.min_zoom_scale, camera_limits.max_zoom_scale);
             }
         }
     }

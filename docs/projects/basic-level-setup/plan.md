@@ -137,8 +137,7 @@ Add camera controls, level editor integration, and polish.
 - [x] Add panning using mouse + right mb
 - [x] On level load reposition camera and zoom level so that the level is centered, and the level fills the screen optimally.
 - [ ] Add camera bounds to prevent moving too far from level
-- [ ] Tune movement speeds for good feel
-- [ ] Add zoom limits (min/max distance)
+- [x] Add zoom limits (min/max distance)
 - [ ] **Update camera rotation system to use hex raycasting** (currently uses XZ plane intersection which is inaccurate for variable height hexes - needs Level data structure from Task 6)
 
 **Test**: Camera controls feel smooth and stay appropriately bounded. Rotation centers correctly on the hex the camera is actually viewing.

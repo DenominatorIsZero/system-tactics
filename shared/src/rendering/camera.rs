@@ -3,6 +3,7 @@
 //! Camera setup, positioning, rotation, and management for optimal tactical RPG viewing.
 
 use bevy::prelude::*;
+use bevy::window::WindowResized;
 use tracing::{debug, info, warn};
 
 use crate::level::LevelsResource;
@@ -25,6 +26,26 @@ pub enum RotationMode {
     Stable,
     Clockwise(f32),        // f32 = remaining rotation in radians
     CounterClockwise(f32), // f32 = remaining rotation in radians
+}
+
+/// Resource to track dynamic camera zoom limits
+#[derive(Resource)]
+pub struct CameraLimits {
+    pub min_zoom_scale: f32,      // Closest zoom - explicit constant
+    pub max_zoom_scale: f32,      // Furthest zoom - calculated optimal scale
+    pub level_diagonal: f32,      // Cached diagonal extent from current level
+    pub needs_recalculation: bool, // Flag to trigger limits recalculation
+}
+
+impl Default for CameraLimits {
+    fn default() -> Self {
+        Self {
+            min_zoom_scale: 0.005,    // Same as current hardcoded minimum
+            max_zoom_scale: 0.05,     // Temporary default, will be calculated
+            level_diagonal: 10.0,     // Default level size
+            needs_recalculation: true, // Initially needs calculation
+        }
+    }
 }
 
 /// Calculate where the camera's forward ray intersects the XZ plane (Y=0)
@@ -103,6 +124,7 @@ pub fn setup_camera(mut commands: Commands) {
 pub fn camera_rotation_animation_system(
     time: Res<Time>,
     mut rotation_state: ResMut<CameraRotationState>,
+    mut camera_limits: ResMut<CameraLimits>,
     mut camera_query: Query<&mut Transform, With<TacticalCamera>>,
 ) {
     if let Ok(mut transform) = camera_query.single_mut() {
@@ -120,9 +142,10 @@ pub fn camera_rotation_animation_system(
 
                 *remaining -= this_frame_rotation;
 
-                // If rotation is complete, snap to stable state
+                // If rotation is complete, snap to stable state and trigger limits recalculation
                 if *remaining <= 0.0 {
                     rotation_state.rotation_mode = RotationMode::Stable;
+                    camera_limits.needs_recalculation = true;
                 }
             }
             RotationMode::CounterClockwise(remaining) => {
@@ -135,9 +158,10 @@ pub fn camera_rotation_animation_system(
 
                 *remaining -= this_frame_rotation;
 
-                // If rotation is complete, snap to stable state
+                // If rotation is complete, snap to stable state and trigger limits recalculation
                 if *remaining <= 0.0 {
                     rotation_state.rotation_mode = RotationMode::Stable;
+                    camera_limits.needs_recalculation = true;
                 }
             }
             RotationMode::Stable => {
@@ -147,11 +171,94 @@ pub fn camera_rotation_animation_system(
     }
 }
 
+/// System to update camera zoom limits based on level size, camera orientation, and window size
+pub fn update_camera_limits_system(
+    mut window_resize_events: EventReader<WindowResized>,
+    mut camera_limits: ResMut<CameraLimits>,
+    camera_query: Query<&Transform, With<TacticalCamera>>,
+    windows: Query<&Window>,
+) {
+    let window_resized = window_resize_events.read().count() > 0;
+
+    // Only recalculate if window was resized or flag is set
+    if !window_resized && !camera_limits.needs_recalculation {
+        return;
+    }
+    let Ok(transform) = camera_query.single() else {
+        return;
+    };
+
+    let Some(window) = windows.iter().next() else {
+        warn!("No window available for camera limits calculation");
+        return;
+    };
+
+    // Determine viewport dimension based on camera Y rotation
+    let (yaw, _, _) = transform.rotation.to_euler(bevy::math::EulerRot::YXZ);
+    let yaw_degrees = yaw.to_degrees();
+
+    // Normalize angle to 0-360 range for easier comparison
+    let normalized_yaw = if yaw_degrees < 0.0 {
+        yaw_degrees + 360.0
+    } else {
+        yaw_degrees
+    };
+
+    // Check if camera is rotated to portrait orientation (±90° from default)
+    // Default starts at -45° (315°), so portrait orientations are around 45° and 225°
+    let is_portrait =
+        (35.0..=55.0).contains(&normalized_yaw) || (215.0..=235.0).contains(&normalized_yaw);
+
+    let viewport_size = if is_portrait {
+        window.height()
+    } else {
+        window.width()
+    };
+
+    // Calculate optimal scale using cached level diagonal
+    let padding = 3.0;
+    let padded_diagonal = camera_limits.level_diagonal + padding;
+    let optimal_scale = padded_diagonal / viewport_size;
+
+    // Update max zoom limit and clear recalculation flag
+    camera_limits.max_zoom_scale = optimal_scale;
+    camera_limits.needs_recalculation = false;
+
+    debug!(
+        "Updated camera limits: max_scale={scale:.4} (diagonal={diagonal:.2}, viewport={viewport_size}, portrait={is_portrait})",
+        scale = optimal_scale,
+        diagonal = camera_limits.level_diagonal
+    );
+}
+
+/// System to cache level diagonal when level changes
+pub fn cache_level_diagonal_system(
+    levels_resource: Res<LevelsResource>,
+    mut camera_limits: ResMut<CameraLimits>,
+) {
+    // Only trigger when LevelsResource has actually changed
+    if !levels_resource.is_changed() {
+        return;
+    }
+
+    let level = levels_resource.current_level();
+
+    // Cache level diagonal in camera limits and trigger limits recalculation
+    camera_limits.level_diagonal = level.get_level_diagonal_extent();
+    camera_limits.needs_recalculation = true;
+
+    debug!(
+        "Cached level diagonal for '{level_name}': {diagonal:.2}",
+        level_name = level.name,
+        diagonal = camera_limits.level_diagonal
+    );
+}
+
 /// System to automatically position and zoom camera for optimal level viewing when level changes
 pub fn position_camera_for_level_system(
     levels_resource: Res<LevelsResource>,
+    camera_limits: Res<CameraLimits>,
     mut camera_query: Query<(&mut Transform, &mut Projection), With<TacticalCamera>>,
-    windows: Query<&Window>,
 ) {
     // Only trigger when LevelsResource has actually changed
     if !levels_resource.is_changed() {
@@ -180,62 +287,17 @@ pub fn position_camera_for_level_system(
         let camera_z = center_pos.z - t * camera_forward.z;
         let camera_pos = Vec3::new(camera_x, camera_height, camera_z);
 
-        // Viewport-aware scale calculation using level diagonal extent
-        let window = match windows.iter().next() {
-            Some(window) => window,
-            None => {
-                warn!("No window available for camera positioning");
-                return; // No window available, skip camera positioning
-            }
-        };
-        let viewport_width = window.width();
-        let viewport_height = window.height();
-
-        // Determine viewport dimension based on camera Y rotation
-        // Extract Y rotation from camera transform
-        let (yaw, _, _) = transform.rotation.to_euler(bevy::math::EulerRot::YXZ);
-        let yaw_degrees = yaw.to_degrees();
-
-        // Normalize angle to 0-360 range for easier comparison
-        let normalized_yaw = if yaw_degrees < 0.0 {
-            yaw_degrees + 360.0
-        } else {
-            yaw_degrees
-        };
-
-        // Check if camera is rotated to portrait orientation (±90° from default)
-        // Default starts at -45° (315°), so portrait orientations are around 45° and 225°
-        let is_portrait =
-            (35.0..=55.0).contains(&normalized_yaw) || (215.0..=235.0).contains(&normalized_yaw);
-
-        let viewport_size = if is_portrait {
-            window.height()
-        } else {
-            window.width()
-        };
-
-        // Get diagonal extent of level in world units
-        let level_diagonal = level.get_level_diagonal_extent();
-
-        let padding = 3.0;
-        let padded_diagonal = level_diagonal + padding;
-
-        // Calculate scale: padded diagonal should fit in viewport
-        let optimal_scale = padded_diagonal / viewport_size;
-
-        // Apply the new position and zoom
+        // Apply the new position and use limits-calculated optimal scale
         transform.translation = camera_pos;
         if let Projection::Orthographic(ortho) = projection.as_mut() {
-            ortho.scale = optimal_scale;
+            ortho.scale = camera_limits.max_zoom_scale;
         }
 
         info!(
-            "Camera positioned for level '{level_name}': position {camera_pos:?}, scale {scale:.4} (viewport: {viewport_width}x{viewport_height}, using {viewport_dim} {viewport_size}, yaw: {yaw:.1}°, diagonal: {diagonal:.2})",
+            "Camera positioned for level '{level_name}': position {camera_pos:?}, scale {scale:.4} (diagonal: {diagonal:.2})",
             level_name = level.name,
-            scale = optimal_scale,
-            viewport_dim = if is_portrait { "height" } else { "width" },
-            yaw = normalized_yaw,
-            diagonal = level_diagonal
+            scale = camera_limits.max_zoom_scale,
+            diagonal = camera_limits.level_diagonal
         );
     }
 }

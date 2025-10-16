@@ -116,7 +116,7 @@ Add camera controls, level editor integration, and polish.
 
 **Test**: Game loads levels from TOML files and can access multiple levels. ✅
 
-#### Subtask 6.3: Level Cycling System
+#### Subtask 6.3: Level Cycling System ✅
 
 - [x] Implement left/right arrow key input handling
 - [x] Add level switching system that:
@@ -124,13 +124,12 @@ Add camera controls, level editor integration, and polish.
   - Loads new level from LevelsResource
   - Spawns new hex grid based on selected level
   - Updates level name display (should run automatically)
-- [ ] Add smooth transitions between levels (deferred for future enhancement)
 
 **Test**: Can cycle through multiple levels with left/right arrows, each showing different sizes and names. ✅
 
 **Implementation Notes**: Added `HexGridEntity` component marker, `level_cycling_input_system` for arrow key handling, and `level_switching_system` for despawn/respawn logic. All systems integrated into `LevelPlugin`. Smooth transitions skipped for now - will implement fancy hex animations later.
 
-### Task 8: Enhanced Camera Controls
+### Task 8: Enhanced Camera Controls ✅
 
 **Goal**: Make camera controls feel polished.
 
@@ -138,7 +137,7 @@ Add camera controls, level editor integration, and polish.
 - [x] On level load reposition camera and zoom level so that the level is centered, and the level fills the screen optimally.
 - [x] Add camera bounds to prevent moving too far from level
 - [x] Add zoom limits (min/max distance)
-- [ ] **Update camera rotation system to use hex raycasting** (currently uses XZ plane intersection which is inaccurate for variable height hexes - needs Level data structure from Task 6)
+- [x] **Update camera rotation system to use hex raycasting** (currently uses XZ plane intersection which is inaccurate for variable height hexes - needs Level data structure from Task 6)
 
 **Test**: Camera controls feel smooth and stay appropriately bounded. Rotation centers correctly on the hex the camera is actually viewing.
 

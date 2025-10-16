@@ -256,7 +256,16 @@ pub fn camera_mouse_pan_system(
 pub fn clamp_camera_position_system(
     camera_limits: Res<CameraLimits>,
     mut camera_query: Query<&mut Transform, With<TacticalCamera>>,
+    rotation_state: Res<CameraRotationState>,
 ) {
+    // Don't clamp if rotation is not processed
+    if !camera_limits.rotation_processed {
+        return;
+    }
+    // Block panning during camera rotation to maintain consistent behavior
+    if !matches!(rotation_state.rotation_mode, RotationMode::Stable) {
+        return;
+    }
     if let Ok(mut transform) = camera_query.single_mut() {
         let current_movement_radius = camera_limits.current_movement_radius;
 

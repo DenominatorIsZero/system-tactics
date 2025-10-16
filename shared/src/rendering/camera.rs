@@ -54,20 +54,95 @@ impl Default for CameraLimits {
     }
 }
 
-/// Calculate where the camera's forward ray intersects the XZ plane (Y=0)
+/// Check if a 2D point is inside a regular hexagon using optimized symmetry algorithm
+fn is_inside_regular_hexagon(point: Vec2, center: Vec2, radius: f32) -> bool {
+    let dx = (point.x - center.x).abs();
+    let dy = (point.y - center.y).abs();
+
+    // Use hexagon's symmetry - only check 3 edges
+    if dx > radius * 0.866 {
+        // sqrt(3)/2
+        return false;
+    }
+    if dy > radius {
+        return false;
+    }
+    radius * 1.5 - 0.866 * dx - 0.5 * dy >= 0.0
+}
+
+/// Raycast against hex top surfaces to find the intersection point
 ///
-/// LIMITATION: This uses ground plane (Y=0) intersection, which doesn't account for
-/// variable hex heights. For tall hexes, the camera is actually looking at the hex
-/// top surface, not the ground. This causes the rotation center to be offset from
-/// the hex the player is actually viewing.
+/// Iterates through all hexes in the level and performs ray-plane intersection
+/// with each hex's top surface. Returns the first valid intersection found.
+pub fn raycast_hex_surfaces(
+    camera_pos: Vec3,
+    direction: Vec3,
+    level: &crate::level::Level,
+) -> Option<Vec3> {
+    use crate::level::Level;
+
+    // If camera is looking parallel to XZ plane, skip raycasting
+    if direction.y.abs() < 0.001 {
+        return None;
+    }
+
+    let hex_layout = Level::hex_layout();
+
+    // For pointy orientation with scale 1.0, the radius (center to vertex) is 1.0
+    let hex_radius = 1.0;
+
+    // Iterate through all hexes and find first intersection
+    for hex in level.get_hex_grid() {
+        let height = level.get_height(hex);
+
+        // Calculate ray-plane intersection at this hex's height
+        // Ray equation: point = camera_pos + t * direction
+        // Plane equation: y = height
+        // Intersection: height = camera_pos.y + t * direction.y
+        let t = (height - camera_pos.y) / direction.y;
+
+        // Skip if intersection is behind camera
+        if t < 0.0 {
+            continue;
+        }
+
+        let intersection = camera_pos + direction * t;
+
+        // Get hex center in world space
+        let hex_world_pos = hex_layout.hex_to_world_pos(hex);
+        let hex_center_2d = Vec2::new(hex_world_pos.x, hex_world_pos.y);
+        let intersection_2d = Vec2::new(intersection.x, intersection.z);
+
+        // Check if intersection point is inside this hex
+        if is_inside_regular_hexagon(intersection_2d, hex_center_2d, hex_radius) {
+            return Some(Vec3::new(intersection.x, height, intersection.z));
+        }
+    }
+
+    None
+}
+
+/// Calculate where the camera's forward ray intersects hex surfaces
 ///
-/// TODO (Task 8): Replace with proper hex raycasting when level data structure is
-/// implemented. Should raycast against hex column bounds and return intersection
-/// with the actual hex surface the camera is looking at.
-pub fn calculate_camera_focus_point(transform: &Transform) -> Vec3 {
+/// Uses proper hex raycasting to find intersection with actual hex top surfaces
+/// at their variable heights. Falls back to XZ plane intersection if no hex hit.
+///
+/// LIMITATION: Currently only raycasts against hex top surfaces. If the camera
+/// is looking at the side of a hex cylinder (e.g., from a very low angle), the
+/// ray may miss all top surfaces and fall back to XZ plane intersection, which
+/// could be inaccurate for the viewed hex.
+///
+/// TODO: Add cylinder side raycasting for edge cases where camera looks at hex sides.
+pub fn calculate_camera_focus_point(transform: &Transform, level: &crate::level::Level) -> Vec3 {
     let camera_pos = transform.translation;
     let forward_dir = transform.forward();
 
+    // Try hex raycasting first
+    if let Some(hex_intersection) = raycast_hex_surfaces(camera_pos, *forward_dir, level) {
+        return hex_intersection;
+    }
+
+    // Fallback to XZ plane intersection if no hex hit
     // If camera is looking parallel to XZ plane, use fallback
     if forward_dir.y.abs() < 0.001 {
         // Camera looking horizontally, use a point directly in front
@@ -84,7 +159,6 @@ pub fn calculate_camera_focus_point(transform: &Transform) -> Vec3 {
     let intersection = camera_pos + forward_dir * t;
 
     // Return intersection point on XZ plane
-    // NOTE: This will be inaccurate for variable height hexes - see TODO above
     Vec3::new(intersection.x, 0.0, intersection.z)
 }
 

@@ -132,19 +132,21 @@ pub fn camera_rotation_input_system(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut rotation_state: ResMut<CameraRotationState>,
     camera_query: Query<&Transform, With<TacticalCamera>>,
+    levels_resource: Res<LevelsResource>,
 ) {
     // Only accept input when camera is stable (not currently rotating)
     if matches!(rotation_state.rotation_mode, RotationMode::Stable) {
         if let Ok(transform) = camera_query.single() {
+            let level = levels_resource.current_level();
             // Q rotates counter-clockwise (90 degrees)
             if keyboard_input.just_pressed(KeyCode::KeyQ) {
-                rotation_state.focus_point = calculate_camera_focus_point(transform);
+                rotation_state.focus_point = calculate_camera_focus_point(transform, level);
                 rotation_state.rotation_mode =
                     RotationMode::CounterClockwise(90.0_f32.to_radians());
             }
             // E rotates clockwise (90 degrees)
             if keyboard_input.just_pressed(KeyCode::KeyE) {
-                rotation_state.focus_point = calculate_camera_focus_point(transform);
+                rotation_state.focus_point = calculate_camera_focus_point(transform, level);
                 rotation_state.rotation_mode = RotationMode::Clockwise(90.0_f32.to_radians());
             }
         }

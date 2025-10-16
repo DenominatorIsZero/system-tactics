@@ -38,6 +38,7 @@ pub fn camera_intersection_debug_system(
     mut gizmos: Gizmos,
     debug_visibility: Res<DebugAidVisibility>,
     camera_query: Query<&Transform, With<TacticalCamera>>,
+    levels_resource: Res<crate::level::LevelsResource>,
 ) {
     // Only render if debug aids are visible
     if !debug_visibility.visible {
@@ -45,10 +46,11 @@ pub fn camera_intersection_debug_system(
     }
 
     if let Ok(transform) = camera_query.single() {
-        // Calculate focus point intersection with ground plane
-        let focus_point = calculate_camera_focus_point(transform);
+        let level = levels_resource.current_level();
+        // Calculate focus point intersection with hex surfaces
+        let focus_point = calculate_camera_focus_point(transform, level);
 
-        // Draw sphere at intersection point - this shows where the ray hits the ground
+        // Draw sphere at intersection point - this shows where the ray hits the hex surface
         gizmos.sphere(focus_point, 0.15, Color::srgba(1.0, 0.0, 0.0, 0.9)); // Red sphere
     }
 }
@@ -221,11 +223,13 @@ pub fn debug_text_update_system(
     mut camera_text_query: Query<&mut Text, With<DebugCameraText>>,
     mut focus_text_query: Query<&mut Text, (With<DebugFocusText>, Without<DebugCameraText>)>,
     mut distance_text_query: DistanceTextQuery,
+    levels_resource: Res<crate::level::LevelsResource>,
 ) {
     // Only update when camera transform has changed
     if let Ok(transform) = camera_query.single() {
         let camera_pos = transform.translation;
-        let focus_point = calculate_camera_focus_point(transform);
+        let level = levels_resource.current_level();
+        let focus_point = calculate_camera_focus_point(transform, level);
         let distance = camera_pos.distance(focus_point);
 
         // Update camera position text

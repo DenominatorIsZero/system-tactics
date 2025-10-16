@@ -10,11 +10,16 @@ use crate::rendering::camera::{
     CameraLimits, CameraRotationState, camera_rotation_animation_system, on_level_change_system,
     on_rotation_complete_system, on_window_resize_system, on_zoom_change_system, setup_camera,
 };
+use crate::rendering::debug_aids::{
+    DebugAidVisibility, camera_intersection_debug_system, debug_crosshair_system,
+    debug_text_spawn_system, debug_text_update_system,
+};
 use crate::rendering::ui::{
     spawn_fps_counter, spawn_level_name_ui, update_fps_display, update_level_name_display,
 };
 
 pub mod camera;
+pub mod debug_aids;
 pub mod ui;
 
 /// System to setup tactical lighting
@@ -57,6 +62,7 @@ impl Plugin for RenderingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CameraRotationState>()
             .init_resource::<CameraLimits>()
+            .init_resource::<DebugAidVisibility>()
             .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
             .add_systems(
                 Startup,
@@ -77,6 +83,11 @@ impl Plugin for RenderingPlugin {
                     on_window_resize_system,
                     update_fps_display,
                     update_level_name_display,
+                    // Debug aid systems - run after camera updates
+                    camera_intersection_debug_system,
+                    debug_crosshair_system,
+                    debug_text_spawn_system,
+                    debug_text_update_system,
                 ),
             );
     }

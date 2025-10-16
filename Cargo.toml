@@ -14,7 +14,7 @@ keywords = ["game", "tactical-rpg", "bevy", "wasm", "hex-grid", "rust"]
 categories = ["games", "web-programming", "webassembly", "simulation"]
 
 [workspace.dependencies]
-bevy = "0.16.1"
+bevy = { version = "0.16.1", features = ["bevy_gizmos"] }
 hexx = { version = "0.21", features = ["serde", "mesh"] }
 anyhow = "1.0.99"
 serde = { version = "1.0.207", features = ["derive"] }

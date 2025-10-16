@@ -12,6 +12,7 @@ use crate::level::LevelsResource;
 use crate::rendering::camera::{
     CameraLimits, CameraRotationState, RotationMode, TacticalCamera, calculate_camera_focus_point,
 };
+use crate::rendering::debug_aids::DebugAidVisibility;
 
 /// System to handle left/right arrow key input for level cycling
 pub fn level_cycling_input_system(
@@ -279,6 +280,25 @@ pub fn clamp_camera_position_system(
     }
 }
 
+/// System to handle F1 key input for toggling debug aids
+pub fn debug_aid_toggle_system(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    mut debug_visibility: ResMut<DebugAidVisibility>,
+) {
+    if keyboard_input.just_pressed(KeyCode::F1) {
+        debug_visibility.visible = !debug_visibility.visible;
+
+        info!(
+            "Debug aids toggled: {}",
+            if debug_visibility.visible {
+                "ON"
+            } else {
+                "OFF"
+            }
+        );
+    }
+}
+
 /// Plugin for input handling (camera controls, level cycling, debug commands)
 pub struct InputPlugin;
 
@@ -293,6 +313,7 @@ impl Plugin for InputPlugin {
                 camera_rotation_input_system,
                 camera_mouse_pan_system,
                 debug_camera_logging_system,
+                debug_aid_toggle_system,
                 clamp_camera_position_system
                     .after(camera_movement_system)
                     .after(camera_mouse_pan_system),

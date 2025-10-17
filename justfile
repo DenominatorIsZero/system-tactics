@@ -16,6 +16,15 @@ setup:
 clean:
     cargo clean
 
+# Copy assets to embedded location for WASM builds
+copy-assets:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Copying assets for WASM embedding..."
+    rm -rf game/src/assets
+    cp -r assets game/src/assets
+    echo "Assets copied to game/src/assets/"
+
 # Build Commands
 
 # Build all workspace components (debug)
@@ -27,15 +36,15 @@ build-release:
     cargo build --workspace --release
 
 # Build WASM binary (debug) - for testing with wasm-server-runner
-build-wasm:
+build-wasm: copy-assets
     cargo build --target wasm32-unknown-unknown --bin game
 
 # Build WASM binary (release) - for testing with wasm-server-runner
-build-wasm-release:
+build-wasm-release: copy-assets
     cargo build --target wasm32-unknown-unknown --bin game --release
 
 # Build web package with wasm-bindgen (for website deployment)
-build-web:
+build-web: copy-assets
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Building release WASM for SystemTactics web deployment..."

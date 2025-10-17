@@ -4,14 +4,18 @@
 //! hex-based level geometry in both the game and level editor applications.
 
 use anyhow::{Context, Result};
+#[cfg(not(target_arch = "wasm32"))]
 use bevy::pbr::wireframe::{WireframeConfig, WireframePlugin};
 use bevy::prelude::*;
 use hexx::{Hex, HexLayout};
 use ndarray::Array2;
 use serde::{Deserialize, Serialize};
 use std::fs;
+#[cfg(target_arch = "wasm32")]
+use toml;
 use tracing::{info, warn};
 
+#[cfg(not(target_arch = "wasm32"))]
 use crate::colors::*;
 use crate::level::management::level_switching_system;
 use crate::level::mesh::spawn_hex_grid;
@@ -228,6 +232,14 @@ impl LevelsResource {
         }
     }
 
+    /// Create a new LevelsResource with provided levels
+    pub fn new(levels: Vec<Level>) -> Self {
+        Self {
+            levels,
+            current_level_index: 0,
+        }
+    }
+
     /// Get the currently active level
     pub fn current_level(&self) -> &Level {
         &self.levels[self.current_level_index]
@@ -242,6 +254,52 @@ impl LevelsResource {
 /// Load all level files from the assets/levels/ directory
 pub fn load_levels_from_assets() -> Result<LevelsResource> {
     load_levels_from_directory("assets/levels")
+}
+
+/// Create levels resource from embedded assets for WASM builds
+#[cfg(target_arch = "wasm32")]
+pub fn create_levels_from_embedded_assets() -> LevelsResource {
+    let mut levels = Vec::new();
+
+    // Manually include the embedded level data
+    // These correspond to the files we embedded with embedded_asset!
+    let level_data = [
+        (
+            "default.toml",
+            include_str!("../../assets/levels/default.toml"),
+        ),
+        (
+            "test_small.toml",
+            include_str!("../../assets/levels/test_small.toml"),
+        ),
+        (
+            "test_large.toml",
+            include_str!("../../assets/levels/test_large.toml"),
+        ),
+    ];
+
+    for (filename, content) in level_data {
+        match toml::from_str::<Level>(content) {
+            Ok(level) => {
+                info!(
+                    "Successfully loaded embedded level: '{}' ({}x{})",
+                    level.name, level.width, level.height
+                );
+                levels.push(level);
+            }
+            Err(err) => {
+                warn!("Failed to parse embedded level file '{filename}': {err}");
+            }
+        }
+    }
+
+    if levels.is_empty() {
+        warn!("No embedded levels loaded, using default level");
+        LevelsResource::with_default()
+    } else {
+        info!("Successfully loaded {} embedded levels", levels.len());
+        LevelsResource::new(levels)
+    }
 }
 
 /// Load all level files from a specific directory
@@ -362,30 +420,46 @@ pub struct LevelPlugin;
 
 impl Plugin for LevelPlugin {
     fn build(&self, app: &mut App) {
-        // Load levels from assets or fallback to default
-        let levels_resource = match load_levels_from_assets() {
-            Ok(levels) => {
-                info!(
-                    "LevelPlugin: Successfully loaded {count} levels from assets",
-                    count = levels.level_count()
-                );
-                levels
+        // Load levels differently for native vs WASM builds
+        let levels_resource = {
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                // Native: Load from file system
+                match load_levels_from_assets() {
+                    Ok(levels) => {
+                        info!(
+                            "LevelPlugin: Successfully loaded {count} levels from assets",
+                            count = levels.level_count()
+                        );
+                        levels
+                    }
+                    Err(err) => {
+                        warn!("LevelPlugin: Failed to load levels from assets: {err}");
+                        warn!("LevelPlugin: Using fallback default level");
+                        LevelsResource::with_default()
+                    }
+                }
             }
-            Err(err) => {
-                warn!("LevelPlugin: Failed to load levels from assets: {err}");
-                warn!("LevelPlugin: Using fallback default level");
-                LevelsResource::with_default()
+
+            #[cfg(target_arch = "wasm32")]
+            {
+                // WASM: Create levels resource with embedded asset data
+                info!("LevelPlugin: Loading levels from embedded assets for WASM");
+                create_levels_from_embedded_assets()
             }
         };
 
+        // Add wireframe plugin only for native builds (WASM doesn't support POLYGON_MODE_LINE)
+        #[cfg(not(target_arch = "wasm32"))]
         app.add_plugins(WireframePlugin::default())
             .insert_resource(WireframeConfig {
                 // Only show wireframes on entities with Wireframe component
                 global: false,
                 // Set the wireframe color to tactical green
                 default_color: HEX_EDGE_GREEN,
-            })
-            .insert_resource(levels_resource)
+            });
+
+        app.insert_resource(levels_resource)
             .add_systems(Startup, spawn_hex_grid)
             .add_systems(Update, (level_cycling_input_system, level_switching_system));
 

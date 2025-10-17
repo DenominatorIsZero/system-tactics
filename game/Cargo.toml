@@ -22,6 +22,11 @@ shared = { path = "../shared" }
 [target.wasm32-unknown-unknown.dependencies]
 # WASM-specific optimizations
 wasm-bindgen = "0.2"
+# getrandom is pulled in by Bevy (for UUIDs) and other dependencies
+# but doesn't enable the wasm_js feature required for WASM compilation.
+# We add it here solely to enable that feature - we don't use it directly.
+getrandom = { version = "0.3", features = ["wasm_js"] }
+console_error_panic_hook = "0.1"
 
 [[bin]]
 name = "game"

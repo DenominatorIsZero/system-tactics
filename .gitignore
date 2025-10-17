@@ -7,6 +7,10 @@
 # Generated web assets (can be rebuilt with `just build-web`)
 interactive/web/*.wasm
 interactive/web/*.js
+game/web/
+
+# Embedded assets for WASM (copied from main assets folder)
+game/src/assets/
 
 # IDE
 .vscode/

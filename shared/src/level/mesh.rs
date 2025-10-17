@@ -3,6 +3,7 @@
 //! Hex column mesh generation, grid spawning systems, and mesh utilities
 //! for rendering tactical RPG level geometry.
 
+#[cfg(not(target_arch = "wasm32"))]
 use bevy::pbr::wireframe::Wireframe;
 use bevy::prelude::*;
 use bevy::render::{
@@ -85,12 +86,21 @@ pub fn spawn_hex_grid_internal(
         let hex_mesh = create_hex_column_mesh(&hex_layout, height);
         let world_pos = hex_layout.hex_to_world_pos(hex);
 
-        // Spawn hex column with both solid surface and wireframe edges
+        // Spawn hex column - with wireframes on native, without on WASM
+        #[cfg(not(target_arch = "wasm32"))]
         commands.spawn((
             Mesh3d(meshes.add(hex_mesh)),
             MeshMaterial3d(hex_material.clone()),
             Transform::from_xyz(world_pos.x, 0.0, world_pos.y),
-            Wireframe,     // Add tactical green wireframe edges
+            Wireframe,     // Add tactical green wireframe edges (native only)
+            HexGridEntity, // Mark for easy identification/cleanup
+        ));
+
+        #[cfg(target_arch = "wasm32")]
+        commands.spawn((
+            Mesh3d(meshes.add(hex_mesh)),
+            MeshMaterial3d(hex_material.clone()),
+            Transform::from_xyz(world_pos.x, 0.0, world_pos.y),
             HexGridEntity, // Mark for easy identification/cleanup
         ));
     }

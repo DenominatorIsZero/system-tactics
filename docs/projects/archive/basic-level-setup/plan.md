@@ -141,17 +141,19 @@ Add camera controls, level editor integration, and polish.
 
 **Test**: Camera controls feel smooth and stay appropriately bounded. Rotation centers correctly on the hex the camera is actually viewing.
 
-### Task 10: WASM and Polish
+### Task 10: WASM and Polish ✅
 
 **Goal**: Verify WASM works and clean up code.
 
-- [ ] Test WASM compilation and browser functionality
-- [ ] Move shared code to proper locations
-- [ ] Add tests for core functionality
-- [ ] Run quality checks and fix issues
-- [ ] Refactor files. Split into more units to make code easier to navigate.
+- [x] Test WASM compilation and browser functionality
+- [x] Move shared code to proper locations
+- [x] Add tests for core functionality
+- [x] Run quality checks and fix issues
+- [x] Refactor files. Split into more units to make code easier to navigate.
 
 **Test**: `just wasm` works and shows hex grid in browser with acceptable performance.
+
+**Status**: ✅ **COMPLETED** - WASM builds successfully, runs in browser with full functionality including level switching, embedded assets, and optimized rendering without wireframes.
 
 ## Dependencies and Setup
 
